@@ -39,16 +39,16 @@ export default function Navbar({ onToggleSidebar }) {
   };
 
   return (
-    <nav className="sticky top-0 z-40 w-full glass-panel border-b border-zinc-800 bg-zinc-950/70 backdrop-blur-md px-4 py-3">
+    <nav className="sticky top-0 z-40 w-full glass-panel border-b border-zinc-800 bg-zinc-950/70 backdrop-blur-md px-3 sm:px-4 py-3">
       {/* Main row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 min-w-0">
         {/* Left: Logo & Sidebar Toggle — hide on mobile when search is open */}
         <div
-          className={`items-center gap-3 ${mobileSearchOpen ? "hidden" : "flex"} md:flex`}
+          className={`items-center gap-2 sm:gap-3 flex-shrink-0 ${mobileSearchOpen ? "hidden" : "flex"} md:flex`}
         >
           <button
             onClick={onToggleSidebar}
-            className="p-2 hover:bg-zinc-800 rounded-full transition-colors duration-200 text-zinc-400 hover:text-zinc-100 focus:outline-none"
+            className="p-1.5 sm:p-2 hover:bg-zinc-800 rounded-full transition-colors duration-200 text-zinc-400 hover:text-zinc-100 focus:outline-none"
           >
             <Menu size={20} />
           </button>
@@ -60,9 +60,9 @@ export default function Navbar({ onToggleSidebar }) {
         {/* Middle: Search Bar — visible on desktop always, on mobile only when toggled open */}
         <form
           onSubmit={handleSearchSubmit}
-          className={`${mobileSearchOpen ? "flex" : "hidden"} md:flex items-center flex-1 md:max-w-lg md:mx-4`}
+          className={`${mobileSearchOpen ? "flex" : "hidden"} md:flex items-center flex-1 min-w-0 md:max-w-lg md:mx-4`}
         >
-          <div className="relative w-full">
+          <div className="relative w-full min-w-0">
             <input
               type="text"
               autoFocus={mobileSearchOpen}
@@ -83,7 +83,7 @@ export default function Navbar({ onToggleSidebar }) {
           </div>
           <button
             type="submit"
-            className="bg-zinc-800 border-y border-r border-zinc-800 hover:bg-zinc-700 hover:border-zinc-700 px-5 py-2 rounded-r-full text-zinc-400 hover:text-zinc-100 transition-all duration-200 flex items-center justify-center"
+            className="bg-zinc-800 border-y border-r border-zinc-800 hover:bg-zinc-700 hover:border-zinc-700 px-4 sm:px-5 py-2 rounded-r-full text-zinc-400 hover:text-zinc-100 transition-all duration-200 flex items-center justify-center flex-shrink-0"
           >
             <Search size={18} />
           </button>
@@ -100,15 +100,15 @@ export default function Navbar({ onToggleSidebar }) {
 
         {/* Right: Actions & Profile — hide on mobile when search is open */}
         <div
-          className={`items-center gap-2 md:gap-4 ${mobileSearchOpen ? "hidden" : "flex"} md:flex`}
+          className={`items-center gap-1.5 sm:gap-2 md:gap-4 flex-shrink-0 ${mobileSearchOpen ? "hidden" : "flex"} md:flex`}
         >
           {/* Mobile search trigger icon */}
           <button
             onClick={() => setMobileSearchOpen(true)}
-            className="md:hidden p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-full transition-colors duration-200"
+            className="md:hidden p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-full transition-colors duration-200 flex-shrink-0"
             aria-label="Open search"
           >
-            <Search size={20} />
+            <Search size={18} />
           </button>
 
           {user ? (
@@ -118,7 +118,7 @@ export default function Navbar({ onToggleSidebar }) {
                   has no bottom nav */}
               <Link
                 href="/dashboard?upload=true"
-                className="hidden md:flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium text-sm px-4 py-2 rounded-full transition-all duration-300 shadow-md shadow-indigo-600/10 focus:outline-none"
+                className="hidden md:flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium text-sm px-4 py-2 rounded-full transition-all duration-300 shadow-md shadow-indigo-600/10 focus:outline-none flex-shrink-0"
               >
                 <Video size={16} />
                 <span className="hidden sm:inline">Upload</span>
@@ -127,10 +127,10 @@ export default function Navbar({ onToggleSidebar }) {
               {/* Notification bell removed */}
 
               {/* Profile Dropdown */}
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center focus:outline-none"
+                  className="flex items-center focus:outline-none flex-shrink-0"
                 >
                   <img
                     src={
@@ -138,7 +138,7 @@ export default function Navbar({ onToggleSidebar }) {
                       "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
                     }
                     alt={user.fullName}
-                    className="w-8 h-8 rounded-full border border-zinc-700 object-cover ring-2 ring-transparent hover:ring-indigo-500 transition-all duration-200"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-700 object-cover ring-2 ring-transparent hover:ring-indigo-500 transition-all duration-200"
                   />
                 </button>
 
@@ -148,7 +148,7 @@ export default function Navbar({ onToggleSidebar }) {
                       className="fixed inset-0 z-30"
                       onClick={() => setDropdownOpen(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-56 glass-panel bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl py-2 z-40 animate-fade-in">
+                    <div className="absolute right-0 mt-2 w-56 max-w-[90vw] glass-panel bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl py-2 z-40 animate-fade-in">
                       <div className="px-4 py-2 border-b border-zinc-800">
                         <p className="text-sm font-semibold text-zinc-200 truncate">
                           {user.fullName}
@@ -189,16 +189,16 @@ export default function Navbar({ onToggleSidebar }) {
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <Link
                 href="/login"
-                className="text-zinc-300 hover:text-white hover:bg-zinc-800 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200"
+                className="text-zinc-300 hover:text-white hover:bg-zinc-800 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap"
               >
                 Sign In
               </Link>
               <Link
                 href="/register"
-                className="bg-zinc-100 hover:bg-zinc-200 text-zinc-950 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200"
+                className="bg-zinc-100 hover:bg-zinc-200 text-zinc-950 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap"
               >
                 Sign Up
               </Link>
