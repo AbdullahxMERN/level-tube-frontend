@@ -111,7 +111,17 @@ export const api = {
           return res;
         },
       ),
-
+    googleLogin: (idToken) =>
+      request("/user/google-login", {
+        method: "POST",
+        body: { idToken },
+      }).then((res) => {
+        if (res.success && res.data.accessToken) {
+          setStoredToken(res.data.accessToken);
+          setStoredUser(res.data.user);
+        }
+        return res;
+      }),
     logout: () =>
       request("/user/logout", { method: "POST" }).then((res) => {
         clearStorage();
