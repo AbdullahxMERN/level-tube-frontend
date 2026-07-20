@@ -1,44 +1,53 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
-import { User, Mail, Lock, UserPlus, Image as ImageIcon, Camera } from 'lucide-react';
-
+import React, { useState } from "react";
+import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
+import {
+  User,
+  Mail,
+  Lock,
+  UserPlus,
+  Image as ImageIcon,
+  Camera,
+} from "lucide-react";
+import Logo from "@/components/Logo";
 export default function RegisterPage() {
   const { register } = useAuth();
-  const [fullName, setFullName] = useState('');
-  const [userName, setUserName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState("");
+  const [userName, setUserName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [avatar, setAvatar] = useState(null);
   const [coverImage, setCoverImage] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!fullName || !userName || !email || !password || !avatar) {
-      return setError('Full Name, Username, Email, Password, and Avatar are required.');
+      return setError(
+        "Full Name, Username, Email, Password, and Avatar are required.",
+      );
     }
 
-    setError('');
+    setError("");
     setLoading(true);
 
     const fd = new FormData();
-    fd.append('fullName', fullName);
-    fd.append('userName', userName);
-    fd.append('email', email);
-    fd.append('password', password);
-    fd.append('avatar', avatar);
+    fd.append("fullName", fullName);
+    fd.append("userName", userName);
+    fd.append("email", email);
+    fd.append("password", password);
+    fd.append("avatar", avatar);
     if (coverImage) {
-      fd.append('coverImage', coverImage);
+      fd.append("coverImage", coverImage);
     }
 
     const result = await register(fd);
     if (!result.success) {
-      setError(result.error || 'Registration failed');
+      setError(result.error || "Registration failed");
       setLoading(false);
     }
   };
@@ -52,11 +61,16 @@ export default function RegisterPage() {
       <div className="w-full max-w-lg glass-panel border border-zinc-900 bg-zinc-900/20 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl animate-fade-in z-10 flex flex-col gap-5">
         {/* Title */}
         <div className="flex flex-col items-center text-center gap-1">
-          <Link href="/" className="flex items-center gap-2 font-bold text-2xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-500 mb-1">
-            LevelTube
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-bold text-2xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-500 mb-1"
+          >
+            <logo />
           </Link>
           <h2 className="text-xl font-bold text-zinc-100">Create Account</h2>
-          <p className="text-xs text-zinc-500 font-light">Set up your profile and start uploading your custom videos.</p>
+          <p className="text-xs text-zinc-500 font-light">
+            Set up your profile and start uploading your custom videos.
+          </p>
         </div>
 
         {error && (
@@ -69,7 +83,9 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-zinc-400 font-semibold pl-1">Full Name</label>
+              <label className="text-xs text-zinc-400 font-semibold pl-1">
+                Full Name
+              </label>
               <div className="relative">
                 <input
                   type="text"
@@ -79,12 +95,17 @@ export default function RegisterPage() {
                   required
                   className="w-full bg-zinc-950 border border-zinc-850 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-indigo-500"
                 />
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
+                <User
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600"
+                  size={16}
+                />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-zinc-400 font-semibold pl-1">Username</label>
+              <label className="text-xs text-zinc-400 font-semibold pl-1">
+                Username
+              </label>
               <div className="relative">
                 <input
                   type="text"
@@ -94,13 +115,18 @@ export default function RegisterPage() {
                   required
                   className="w-full bg-zinc-950 border border-zinc-850 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-indigo-500"
                 />
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
+                <User
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600"
+                  size={16}
+                />
               </div>
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-zinc-400 font-semibold pl-1">Email Address</label>
+            <label className="text-xs text-zinc-400 font-semibold pl-1">
+              Email Address
+            </label>
             <div className="relative">
               <input
                 type="email"
@@ -110,12 +136,17 @@ export default function RegisterPage() {
                 required
                 className="w-full bg-zinc-950 border border-zinc-850 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-indigo-500"
               />
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
+              <Mail
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600"
+                size={16}
+              />
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-zinc-400 font-semibold pl-1">Password</label>
+            <label className="text-xs text-zinc-400 font-semibold pl-1">
+              Password
+            </label>
             <div className="relative">
               <input
                 type="password"
@@ -125,7 +156,10 @@ export default function RegisterPage() {
                 required
                 className="w-full bg-zinc-950 border border-zinc-850 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-indigo-500"
               />
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
+              <Lock
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600"
+                size={16}
+              />
             </div>
           </div>
 
@@ -177,7 +211,10 @@ export default function RegisterPage() {
 
         <div className="text-center text-xs text-zinc-500 border-t border-zinc-900/60 pt-4 mt-2">
           <span>Already have an account? </span>
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors ml-1">
+          <Link
+            href="/login"
+            className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors ml-1"
+          >
             Sign In
           </Link>
         </div>
