@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+:root {
+  --background: #030303; /* Deep pure black */
+  --foreground: #fafafa; /* Crisp soft white */
+  --primary-accent: #6366f1; /* Indigo 500 */
+  --secondary-accent: #a855f7; /* Purple 500 */
+}
+
+body {
+  background-color: var(--background);
+  /* Mesh Grid Background with radial ambient glows */
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.07) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.07) 0%, transparent 45%);
+  background-size: 48px 48px, 48px 48px, 100% 100%, 100% 100%;
+  color: var(--foreground);
+  font-family: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  letter-spacing: -0.01em;
+}
+
+/* Premium Glassmorphism */
+.glass-panel {
+  background: rgba(9, 9, 11, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Text styling overrides for crisp readability */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #ffffff 30%, #a3a3a3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-accent-gradient {
+  background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Modern thin scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030303;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+  border: 1px solid #030303;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Video Card Hover Effects */
+.video-card-hover {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  background: rgba(9, 9, 11, 0.3);
+}
+
+.video-card-hover:hover {
+  transform: translateY(-4px) scale(1.01);
+  background: rgba(9, 9, 11, 0.5);
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 
+    0 16px 36px -12px rgba(99, 102, 241, 0.25),
+    0 0 1px 1px rgba(99, 102, 241, 0.1);
+}
+
+/* Input Focus Glows */
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  box-shadow: 0 0 16px 2px rgba(99, 102, 241, 0.2) !important;
+  outline: none !important;
+  background-color: #000000 !important;
+}
+
+/* Button hover shimmers */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 45%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 55%
+  );
+  transform: rotate(45deg);
+  transition: transform 0.5s ease;
+}
+
+.btn-shimmer:hover::after {
+  transform: translate(50%, 50%) rotate(45deg);
+}
+
+/* Category filter scroll bar hide */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
