@@ -42,7 +42,7 @@ export default function LoginPage() {
             href="/"
             className="flex items-center gap-2 font-bold text-2xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-500 mb-2"
           >
-            <logo />
+            <Logo />
           </Link>
           <h2 className="text-xl font-bold text-zinc-100">Welcome Back</h2>
           <p className="text-xs text-zinc-500 font-light">

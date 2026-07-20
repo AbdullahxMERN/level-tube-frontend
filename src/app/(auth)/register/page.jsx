@@ -65,7 +65,7 @@ export default function RegisterPage() {
             href="/"
             className="flex items-center gap-2 font-bold text-2xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-500 mb-1"
           >
-            <logo />
+            <Logo />
           </Link>
           <h2 className="text-xl font-bold text-zinc-100">Create Account</h2>
           <p className="text-xs text-zinc-500 font-light">
