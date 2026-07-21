@@ -14,6 +14,8 @@ import {
   Heart,
   Check,
   Download,
+  Reply,
+  X,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
 
@@ -34,6 +36,11 @@ export default function WatchPage() {
 
   // Download state
   const [downloading, setDownloading] = useState(false);
+
+  // Reply state — tracks which comment is being replied to, and the draft text
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const replyInputRef = useRef(null);
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
   const formatDuration = (secs) => {
@@ -98,10 +105,6 @@ export default function WatchPage() {
           const videoData = videoRes.data;
           setVideo(videoData);
 
-          // video.owner does NOT include isSubscribed/subscribersCount -
-          // those are only computed by the channel details aggregation.
-          // Fetch the real channel details separately so the subscribe
-          // button reflects the true, persisted subscription state.
           if (videoData.owner?.userName) {
             try {
               const channelRes = await api.auth.getChannelDetails(
@@ -120,13 +123,11 @@ export default function WatchPage() {
           }
         }
 
-        // Fetch comments
         const commentsRes = await api.comments.getByVideo(videoId);
         if (commentsRes.success && commentsRes.data) {
           setComments(commentsRes.data);
         }
 
-        // Fetch related videos (recommendations)
         const allVideosRes = await api.videos.getAll();
         if (allVideosRes.success && allVideosRes.data) {
           setRecommendations(
@@ -165,7 +166,6 @@ export default function WatchPage() {
       await api.subscriptions.toggle(video.owner._id);
     } catch (err) {
       console.error(err);
-      // Revert optimistic update on failure
       setIsSubscribed(!nextSubscribed);
       setSubscribersCount((prev) => prev + (nextSubscribed ? -1 : 1));
     }
@@ -215,6 +215,39 @@ export default function WatchPage() {
       const response = await api.comments.delete(commentId);
       if (response.success) {
         setComments((prev) => prev.filter((c) => c._id !== commentId));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Opens the reply box under a comment, pre-filled with @username
+  const handleReplyClick = (comment) => {
+    if (!user) return alert("Please sign in to reply");
+    const mention = `@${comment.owner?.userName || "user"} `;
+
+    if (replyingTo === comment._id) {
+      setReplyingTo(null);
+      setReplyText("");
+      return;
+    }
+
+    setReplyingTo(comment._id);
+    setReplyText(mention);
+    setTimeout(() => replyInputRef.current?.focus(), 0);
+  };
+
+  const handleReplySubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return alert("Please sign in to reply");
+    if (!replyText.trim()) return;
+
+    try {
+      const response = await api.comments.add(videoId, replyText);
+      if (response.success && response.data) {
+        setComments((prev) => [response.data, ...prev]);
+        setReplyText("");
+        setReplyingTo(null);
       }
     } catch (err) {
       console.error(err);
@@ -348,7 +381,14 @@ export default function WatchPage() {
                 disabled={downloading}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm border bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-50 transition-all duration-300"
               >
-                <Download size={16} className={downloading ? "animate-bounce text-indigo-400" : "text-zinc-400"} />
+                <Download
+                  size={16}
+                  className={
+                    downloading
+                      ? "animate-bounce text-indigo-400"
+                      : "text-zinc-400"
+                  }
+                />
                 <span>{downloading ? "Downloading..." : "Download"}</span>
               </button>
             </div>
@@ -466,6 +506,61 @@ export default function WatchPage() {
                   <p className="text-sm text-zinc-300 leading-relaxed font-light">
                     {comment.content}
                   </p>
+
+                  {/* Reply trigger */}
+                  <button
+                    onClick={() => handleReplyClick(comment)}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors mt-1 self-start"
+                  >
+                    <Reply size={12} />
+                    <span>
+                      {replyingTo === comment._id ? "Cancel" : "Reply"}
+                    </span>
+                  </button>
+
+                  {/* Inline reply box — only rendered for the comment being replied to */}
+                  {replyingTo === comment._id && (
+                    <form
+                      onSubmit={handleReplySubmit}
+                      className="flex gap-2 mt-2 animate-fade-in"
+                    >
+                      <img
+                        src={
+                          user?.avatar ||
+                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+                        }
+                        alt={user?.fullName || "You"}
+                        className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
+                      />
+                      <div className="flex-1 flex gap-2">
+                        <input
+                          ref={replyInputRef}
+                          type="text"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Write a reply..."
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!replyText.trim()}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                        >
+                          <Send size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingTo(null);
+                            setReplyText("");
+                          }}
+                          className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </div>
             ))}
