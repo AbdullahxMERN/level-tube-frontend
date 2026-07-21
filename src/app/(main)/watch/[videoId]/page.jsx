@@ -62,6 +62,23 @@ export default function WatchPage() {
   // Tracks which comment threads have their replies expanded (YouTube style)
   const [expandedThreads, setExpandedThreads] = useState({});
 
+  // Client-side persistence fallback to hold liked comment IDs across refreshes
+  const [localLikedComments, setLocalLikedComments] = useState(new Set());
+
+  // Load persistent user liked comments from local storage
+  useEffect(() => {
+    if (user?._id) {
+      const stored = localStorage.getItem(`likedComments_${user._id}`);
+      if (stored) {
+        try {
+          setLocalLikedComments(new Set(JSON.parse(stored)));
+        } catch (e) {
+          console.error("Failed to parse local comment likes", e);
+        }
+      }
+    }
+  }, [user]);
+
   // Safe helper to extract likes count from multiple possible backend formats (numeric or array fields)
   const getCommentLikesCount = (comment) => {
     if (typeof comment.likesCount === "number") return comment.likesCount;
@@ -70,13 +87,19 @@ export default function WatchPage() {
     return 0;
   };
 
-  // Safe helper to extract like state depending on back-end format
+  // Safe helper to extract like state depending on local storage or back-end format
   const getCommentIsLiked = (comment) => {
+    // Check locally saved state first (persists even if public comment endpoint is unauthenticated)
+    if (user?._id && localLikedComments.has(comment._id)) {
+      return true;
+    }
     if (typeof comment.isLiked === "boolean") return comment.isLiked;
     if (Array.isArray(comment.likes) && user) {
       return comment.likes.some((like) => {
-        const likedBy = like.likedBy || like.owner || like;
-        return String(likedBy) === String(user._id);
+        const likedBy = like.likedBy || like.owner || like || {};
+        const likedById =
+          typeof likedBy === "object" ? likedBy._id || likedBy : likedBy;
+        return String(likedById) === String(user._id);
       });
     }
     return false;
@@ -232,7 +255,35 @@ export default function WatchPage() {
 
         const commentsRes = await api.comments.getByVideo(videoId);
         if (commentsRes.success && commentsRes.data) {
-          setComments(commentsRes.data);
+          const fetchedComments = commentsRes.data;
+          setComments(fetchedComments);
+
+          // Synchronize database records with local storage liked indices
+          if (user?._id) {
+            const syncedSet = new Set(localLikedComments);
+            fetchedComments.forEach((c) => {
+              const dbLiked =
+                c.isLiked === true ||
+                (Array.isArray(c.likes) &&
+                  c.likes.some((like) => {
+                    const likedBy = like.likedBy || like.owner || like || {};
+                    const likedById =
+                      typeof likedBy === "object"
+                        ? likedBy._id || likedBy
+                        : likedBy;
+                    return String(likedById) === String(user._id);
+                  }));
+
+              if (dbLiked) {
+                syncedSet.add(c._id);
+              }
+            });
+            setLocalLikedComments(syncedSet);
+            localStorage.setItem(
+              `likedComments_${user._id}`,
+              JSON.stringify(Array.from(syncedSet)),
+            );
+          }
         }
 
         const allVideosRes = await api.videos.getAll();
@@ -249,7 +300,7 @@ export default function WatchPage() {
     }
 
     loadData();
-  }, [videoId]);
+  }, [videoId, user?._id]);
 
   const handleLikeToggle = async () => {
     if (!user) return alert("Please sign in to like videos");
@@ -334,6 +385,15 @@ export default function WatchPage() {
       const response = await api.comments.delete(commentId);
       if (response.success) {
         setComments((prev) => prev.filter((c) => c._id !== commentId));
+        if (user?._id) {
+          const updatedSet = new Set(localLikedComments);
+          updatedSet.delete(commentId);
+          setLocalLikedComments(updatedSet);
+          localStorage.setItem(
+            `likedComments_${user._id}`,
+            JSON.stringify(Array.from(updatedSet)),
+          );
+        }
       } else {
         console.error("Delete failed, server responded:", response);
         alert(response.message || "Failed to delete comment");
@@ -419,13 +479,21 @@ export default function WatchPage() {
     likingCommentRef.current.add(commentId);
 
     const prevComments = comments;
+    const prevLocalSet = new Set(localLikedComments);
 
+    const commentObj = comments.find((c) => c._id === commentId);
+    if (!commentObj) {
+      likingCommentRef.current.delete(commentId);
+      return;
+    }
+
+    const currentLiked = getCommentIsLiked(commentObj);
+    const nextLiked = !currentLiked;
+
+    // 1. Update the comments list with next numeric count optimistically
     setComments((prev) =>
       prev.map((c) => {
         if (c._id !== commentId) return c;
-
-        const currentLiked = getCommentIsLiked(c);
-        const nextLiked = !currentLiked;
 
         const currentCount = getCommentLikesCount(c);
         const nextCount = Math.max(0, currentCount + (nextLiked ? 1 : -1));
@@ -434,23 +502,43 @@ export default function WatchPage() {
           ...c,
           isLiked: nextLiked,
           likesCount: nextCount,
-          likes: Array.isArray(c.likes)
-            ? nextLiked
-              ? [...c.likes, user._id]
-              : c.likes.filter((id) => String(id) !== String(user._id))
-            : nextCount,
         };
       }),
+    );
+
+    // 2. Update persistent local storage set optimistically
+    const nextSet = new Set(localLikedComments);
+    if (nextLiked) {
+      nextSet.add(commentId);
+    } else {
+      nextSet.delete(commentId);
+    }
+    setLocalLikedComments(nextSet);
+    localStorage.setItem(
+      `likedComments_${user._id}`,
+      JSON.stringify(Array.from(nextSet)),
     );
 
     try {
       const response = await api.likes.toggleComment(commentId);
       if (!response.success) {
+        // Rollback state on backend logical error
         setComments(prevComments);
+        setLocalLikedComments(prevLocalSet);
+        localStorage.setItem(
+          `likedComments_${user._id}`,
+          JSON.stringify(Array.from(prevLocalSet)),
+        );
       }
     } catch (err) {
       console.error(err);
+      // Rollback state on network/API crash
       setComments(prevComments);
+      setLocalLikedComments(prevLocalSet);
+      localStorage.setItem(
+        `likedComments_${user._id}`,
+        JSON.stringify(Array.from(prevLocalSet)),
+      );
     } finally {
       likingCommentRef.current.delete(commentId);
     }
