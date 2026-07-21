@@ -12,8 +12,8 @@ import {
   Calendar,
   Eye,
   Heart,
-  ListPlus,
   Check,
+  Download,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
 
@@ -32,11 +32,8 @@ export default function WatchPage() {
 
   const [descExpanded, setDescExpanded] = useState(false);
 
-  // Add-to-playlist dropdown state
-  const [showPlaylistMenu, setShowPlaylistMenu] = useState(false);
-  const [myPlaylists, setMyPlaylists] = useState([]);
-  const [playlistsLoading, setPlaylistsLoading] = useState(false);
-  const [addedPlaylistIds, setAddedPlaylistIds] = useState([]);
+  // Download state
+  const [downloading, setDownloading] = useState(false);
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
   const formatDuration = (secs) => {
@@ -174,45 +171,26 @@ export default function WatchPage() {
     }
   };
 
-  const handleOpenPlaylistMenu = async () => {
-    if (!user) return alert("Please sign in to use playlists");
-
-    setShowPlaylistMenu((prev) => !prev);
-
-    // Only fetch the list the first time the menu is opened
-    if (myPlaylists.length === 0) {
-      setPlaylistsLoading(true);
-      try {
-        const response = await api.playlists.getUserPlaylists(user._id);
-        if (response.success && response.data) {
-          setMyPlaylists(response.data);
-          // Pre-mark playlists that already contain this video
-          const already = response.data
-            .filter((pl) => (pl.videos || []).some((v) => v._id === videoId))
-            .map((pl) => pl._id);
-          setAddedPlaylistIds(already);
-        }
-      } catch (err) {
-        console.error("Failed to load playlists:", err);
-      } finally {
-        setPlaylistsLoading(false);
-      }
-    }
-  };
-
-  const handleAddToPlaylist = async (playlistId) => {
-    const alreadyAdded = addedPlaylistIds.includes(playlistId);
+  const handleDownloadVideo = async () => {
+    if (!video?.videoFile) return;
+    setDownloading(true);
     try {
-      if (alreadyAdded) {
-        await api.playlists.removeVideo(playlistId, videoId);
-        setAddedPlaylistIds((prev) => prev.filter((id) => id !== playlistId));
-      } else {
-        await api.playlists.addVideo(playlistId, videoId);
-        setAddedPlaylistIds((prev) => [...prev, playlistId]);
-      }
+      const response = await fetch(video.videoFile);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = `${video.title || "video"}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
-      console.error("Failed to update playlist:", err);
-      alert("Failed to update playlist: " + err.message);
+      console.error("CORS block or fetch error, opening in new tab:", err);
+      window.open(video.videoFile, "_blank");
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -365,52 +343,14 @@ export default function WatchPage() {
                 <span>{isLiked ? "Liked" : "Like"}</span>
               </button>
 
-              {user?.userName === video.owner?.userName && (
-                <button
-                  onClick={handleOpenPlaylistMenu}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm border bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100 transition-all duration-300"
-                >
-                  <ListPlus size={16} />
-                  <span>Save</span>
-                </button>
-              )}
-
-              {showPlaylistMenu && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-20 p-2 flex flex-col gap-1">
-                  <p className="text-xs font-semibold text-zinc-500 px-3 py-2">
-                    Save to playlist
-                  </p>
-
-                  {playlistsLoading ? (
-                    <div className="px-3 py-4 text-xs text-zinc-500 text-center">
-                      Loading...
-                    </div>
-                  ) : myPlaylists.length > 0 ? (
-                    myPlaylists.map((pl) => {
-                      const isAdded = addedPlaylistIds.includes(pl._id);
-                      return (
-                        <button
-                          key={pl._id}
-                          onClick={() => handleAddToPlaylist(pl._id)}
-                          className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-sm text-zinc-200 hover:bg-zinc-800 transition-colors text-left"
-                        >
-                          <span className="truncate">{pl.name}</span>
-                          {isAdded && (
-                            <Check
-                              size={16}
-                              className="text-indigo-400 flex-shrink-0"
-                            />
-                          )}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="px-3 py-4 text-xs text-zinc-500 text-center">
-                      No playlists yet. Create one from the Playlists page.
-                    </div>
-                  )}
-                </div>
-              )}
+              <button
+                onClick={handleDownloadVideo}
+                disabled={downloading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm border bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-50 transition-all duration-300"
+              >
+                <Download size={16} className={downloading ? "animate-bounce text-indigo-400" : "text-zinc-400"} />
+                <span>{downloading ? "Downloading..." : "Download"}</span>
+              </button>
             </div>
           </div>
         </div>
