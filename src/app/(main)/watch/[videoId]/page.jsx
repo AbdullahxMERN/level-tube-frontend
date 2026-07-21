@@ -59,56 +59,94 @@ export default function WatchPage() {
   // Video-like guard — prevents double-fire on the video like button
   const likingVideoRef = useRef(false);
 
-  // Reconstructs a nested parent-child tree from flat comments list.
-  // Walks backwards in chronological order to find the closest preceding comment
-  // made by the mentioned user to nest the reply under.
-  const { roots, childrenMap, commentMap } = useMemo(() => {
-    // 1. Sort comments chronologically (oldest first) to trace parents
+  // Tracks which comment threads have their replies expanded (YouTube style)
+  const [expandedThreads, setExpandedThreads] = useState({});
+
+  // Safe helper to extract likes count from multiple possible backend formats (numeric or array fields)
+  const getCommentLikesCount = (comment) => {
+    if (typeof comment.likesCount === "number") return comment.likesCount;
+    if (Array.isArray(comment.likes)) return comment.likes.length;
+    if (typeof comment.likes === "number") return comment.likes;
+    return 0;
+  };
+
+  // Safe helper to extract like state depending on back-end format
+  const getCommentIsLiked = (comment) => {
+    if (typeof comment.isLiked === "boolean") return comment.isLiked;
+    if (Array.isArray(comment.likes) && user) {
+      return comment.likes.some((like) => {
+        const likedBy = like.likedBy || like.owner || like;
+        return String(likedBy) === String(user._id);
+      });
+    }
+    return false;
+  };
+
+  // Groups comments into 1-level-deep root threads (like YouTube).
+  // Matches replies strictly to the closest preceding root comment by that user.
+  const { rootComments, repliesByParentId } = useMemo(() => {
     const sorted = [...comments].sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
 
-    const commentMap = {};
     const roots = [];
-    const childrenMap = {};
+    const repliesMap = {};
 
+    // First pass: register root comments (comments that don't start with a mention)
     sorted.forEach((c) => {
-      commentMap[c._id] = c;
-      childrenMap[c._id] = [];
+      if (!MENTION_REGEX.test(c.content)) {
+        roots.push(c);
+        repliesMap[c._id] = [];
+      }
     });
 
+    // Second pass: map replies to the correct root thread
     sorted.forEach((c, idx) => {
       const match = c.content.match(MENTION_REGEX);
-      let parentId = null;
-
       if (match) {
         const mentionedUser = match[1].toLowerCase();
-        // Look backward to find the closest preceding comment by this user
+        let parentId = null;
+
+        // Walk backwards to find the closest root comment written by the mentioned user
         for (let i = idx - 1; i >= 0; i--) {
           const candidate = sorted[i];
-          if (candidate.owner?.userName?.toLowerCase() === mentionedUser) {
+          if (
+            !MENTION_REGEX.test(candidate.content) &&
+            candidate.owner?.userName?.toLowerCase() === mentionedUser
+          ) {
             parentId = candidate._id;
             break;
           }
         }
-      }
 
-      if (parentId && commentMap[parentId]) {
-        childrenMap[parentId].push(c._id);
-      } else {
-        roots.push(c._id);
+        // Fallback: if no root comment matches, assign to closest root comment chronologically
+        if (!parentId) {
+          for (let i = idx - 1; i >= 0; i--) {
+            if (!MENTION_REGEX.test(sorted[i].content)) {
+              parentId = sorted[i]._id;
+              break;
+            }
+          }
+        }
+
+        if (parentId && repliesMap[parentId]) {
+          repliesMap[parentId].push(c);
+        } else {
+          // Fallback root assignment
+          roots.push(c);
+          repliesMap[c._id] = [];
+        }
       }
     });
 
-    // Sort top-level root threads descending (newest first)
+    // Sort root threads descending (newest comments on top)
     roots.sort(
       (a, b) =>
-        new Date(commentMap[b].createdAt).getTime() -
-        new Date(commentMap[a].createdAt).getTime(),
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
-    return { roots, childrenMap, commentMap };
+    return { rootComments: roots, repliesByParentId: repliesMap };
   }, [comments]);
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
@@ -385,15 +423,22 @@ export default function WatchPage() {
     setComments((prev) =>
       prev.map((c) => {
         if (c._id !== commentId) return c;
-        const nextLiked = !c.isLiked;
-        const currentCount =
-          typeof c.likesCount === "number" && !isNaN(c.likesCount)
-            ? c.likesCount
-            : 0;
+
+        const currentLiked = getCommentIsLiked(c);
+        const nextLiked = !currentLiked;
+
+        const currentCount = getCommentLikesCount(c);
+        const nextCount = Math.max(0, currentCount + (nextLiked ? 1 : -1));
+
         return {
           ...c,
           isLiked: nextLiked,
-          likesCount: Math.max(0, currentCount + (nextLiked ? 1 : -1)),
+          likesCount: nextCount,
+          likes: Array.isArray(c.likes)
+            ? nextLiked
+              ? [...c.likes, user._id]
+              : c.likes.filter((id) => String(id) !== String(user._id))
+            : nextCount,
         };
       }),
     );
@@ -421,201 +466,189 @@ export default function WatchPage() {
     );
   };
 
-  // Renders a specific comment, its action controls, and its child replies recursively
-  const renderCommentTree = (commentId, depth = 0) => {
-    const comment = commentMap[commentId];
-    if (!comment) return null;
+  const toggleThreadReplies = (commentId) => {
+    setExpandedThreads((prev) => ({
+      ...prev,
+      [commentId]: !prev[commentId],
+    }));
+  };
 
-    const childrenIds = childrenMap[commentId] || [];
-    const commentLikesCount =
-      typeof comment.likesCount === "number" && !isNaN(comment.likesCount)
-        ? comment.likesCount
-        : 0;
+  // Renders a single row item
+  const renderCommentRow = (comment, isReply = false) => {
+    const isLikedState = getCommentIsLiked(comment);
+    const commentLikesCount = getCommentLikesCount(comment);
 
     return (
-      <div key={comment._id} className="flex flex-col gap-3">
-        {/* Main Comment Row */}
-        <div className="flex gap-4 items-start group animate-fade-in">
-          <Link href={`/channel/${comment.owner?.userName}`}>
-            <img
-              src={
-                comment.owner?.avatar ||
-                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-              }
-              alt={comment.owner?.fullName}
-              className={`rounded-full object-cover border border-zinc-800 ${
-                depth > 0 ? "w-7 h-7" : "w-9 h-9"
-              }`}
-            />
-          </Link>
+      <div key={comment._id} className="flex gap-4 items-start group">
+        <Link href={`/channel/${comment.owner?.userName}`}>
+          <img
+            src={
+              comment.owner?.avatar ||
+              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+            }
+            alt={comment.owner?.fullName}
+            className={`rounded-full object-cover border border-zinc-800 ${
+              isReply ? "w-7 h-7" : "w-9 h-9"
+            }`}
+          />
+        </Link>
 
-          <div className="flex-1 flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/channel/${comment.owner?.userName}`}
-                  className={`font-bold text-zinc-200 hover:text-indigo-400 ${
-                    depth > 0 ? "text-xs" : "text-sm"
-                  }`}
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/channel/${comment.owner?.userName}`}
+                className={`font-bold text-zinc-200 hover:text-indigo-400 ${
+                  isReply ? "text-xs" : "text-sm"
+                }`}
+              >
+                {comment.owner?.fullName}
+              </Link>
+              <span className="text-[10px] text-zinc-500">
+                {new Date(comment.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+
+            {isOwnComment(comment) && (
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <button
+                  onClick={() => handleEditClick(comment)}
+                  className="text-zinc-600 hover:text-indigo-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200"
+                  title="Edit Comment"
                 >
-                  {comment.owner?.fullName}
-                </Link>
-                <span className="text-[10px] text-zinc-500">
-                  {new Date(comment.createdAt).toLocaleDateString()}
-                </span>
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => handleCommentDelete(comment._id)}
+                  disabled={deletingId === comment._id}
+                  className="text-zinc-600 hover:text-red-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
+                  title="Delete Comment"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
+            )}
+          </div>
 
-              {isOwnComment(comment) && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                  <button
-                    onClick={() => handleEditClick(comment)}
-                    className="text-zinc-600 hover:text-indigo-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200"
-                    title="Edit Comment"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleCommentDelete(comment._id)}
-                    disabled={deletingId === comment._id}
-                    className="text-zinc-600 hover:text-red-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
-                    title="Delete Comment"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+          {editingId === comment._id ? (
+            <div className="flex flex-col gap-2 mt-1">
+              <input
+                type="text"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEditSave(comment._id)}
+                  disabled={savingEdit || !editText.trim()}
+                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 disabled:opacity-40"
+                >
+                  {savingEdit ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingId(null);
+                    setEditText("");
+                  }}
+                  className="text-xs font-semibold text-zinc-500 hover:text-zinc-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p
+              className={`text-zinc-300 leading-relaxed font-light ${
+                isReply ? "text-xs" : "text-sm"
+              }`}
+            >
+              {comment.content.match(MENTION_REGEX) ? (
+                <>
+                  <span className="text-indigo-400 font-medium">
+                    {comment.content.match(MENTION_REGEX)[0].trim()}
+                  </span>{" "}
+                  {comment.content.replace(MENTION_REGEX, "")}
+                </>
+              ) : (
+                comment.content
               )}
-            </div>
+            </p>
+          )}
 
-            {editingId === comment._id ? (
-              <div className="flex flex-col gap-2 mt-1">
+          {/* Action Row */}
+          <div className="flex items-center gap-4 mt-1">
+            <button
+              onClick={() => handleCommentLikeToggle(comment._id)}
+              aria-label={isLikedState ? "Unlike comment" : "Like comment"}
+              className={`flex items-center gap-1.5 text-xs transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50 ${
+                isLikedState
+                  ? "text-indigo-400 font-semibold"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <ThumbsUp
+                size={12}
+                fill={isLikedState ? "currentColor" : "none"}
+                className="transition-transform active:scale-125 duration-200"
+              />
+              <span>{commentLikesCount}</span>
+            </button>
+
+            <button
+              onClick={() => handleReplyClick(comment)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-indigo-400 transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50"
+            >
+              <Reply size={12} />
+              <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
+            </button>
+          </div>
+
+          {/* Inline Reply Input Form */}
+          {replyingTo === comment._id && (
+            <form
+              onSubmit={handleReplySubmit}
+              className="flex gap-2 mt-3 animate-fade-in"
+            >
+              <img
+                src={
+                  user?.avatar ||
+                  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+                }
+                alt={user?.fullName || "You"}
+                className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
+              />
+              <div className="flex-1 flex gap-2">
                 <input
+                  ref={replyInputRef}
                   type="text"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  autoFocus
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a reply..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
                 />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditSave(comment._id)}
-                    disabled={savingEdit || !editText.trim()}
-                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 disabled:opacity-40"
-                  >
-                    {savingEdit ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingId(null);
-                      setEditText("");
-                    }}
-                    className="text-xs font-semibold text-zinc-500 hover:text-zinc-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={!replyText.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                >
+                  <Send size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyingTo(null);
+                    setReplyText("");
+                  }}
+                  className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                >
+                  <X size={13} />
+                </button>
               </div>
-            ) : (
-              <p
-                className={`text-zinc-300 leading-relaxed font-light ${
-                  depth > 0 ? "text-xs" : "text-sm"
-                }`}
-              >
-                {comment.content.match(MENTION_REGEX) ? (
-                  <>
-                    <span className="text-indigo-400 font-medium">
-                      {comment.content.match(MENTION_REGEX)[0].trim()}
-                    </span>{" "}
-                    {comment.content.replace(MENTION_REGEX, "")}
-                  </>
-                ) : (
-                  comment.content
-                )}
-              </p>
-            )}
-
-            {/* Comment Interactions */}
-            <div className="flex items-center gap-4 mt-1">
-              {/* Thumbs-up Liked Control */}
-              <button
-                onClick={() => handleCommentLikeToggle(comment._id)}
-                aria-label={comment.isLiked ? "Unlike comment" : "Like comment"}
-                className={`flex items-center gap-1.5 text-xs transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50 ${
-                  comment.isLiked
-                    ? "text-indigo-400 font-bold"
-                    : "text-zinc-500 hover:text-zinc-300 font-medium"
-                }`}
-              >
-                <ThumbsUp
-                  size={12}
-                  fill={comment.isLiked ? "currentColor" : "none"}
-                  className="transition-transform active:scale-125 duration-200"
-                />
-                <span>{commentLikesCount}</span>
-              </button>
-
-              <button
-                onClick={() => handleReplyClick(comment)}
-                className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-indigo-400 transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50"
-              >
-                <Reply size={12} />
-                <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
-              </button>
-            </div>
-
-            {/* Inline reply Box — renders directly under the comment containing the reply trigger */}
-            {replyingTo === comment._id && (
-              <form
-                onSubmit={handleReplySubmit}
-                className="flex gap-2 mt-3 animate-fade-in"
-              >
-                <img
-                  src={
-                    user?.avatar ||
-                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-                  }
-                  alt={user?.fullName || "You"}
-                  className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
-                />
-                <div className="flex-1 flex gap-2">
-                  <input
-                    ref={replyInputRef}
-                    type="text"
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Write a reply..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!replyText.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                  >
-                    <Send size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReplyingTo(null);
-                      setReplyText("");
-                    }}
-                    className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
+            </form>
+          )}
         </div>
-
-        {/* Nested child replies section */}
-        {childrenIds.length > 0 && (
-          <div className="pl-4 md:pl-6 border-l border-zinc-800/80 flex flex-col gap-4 mt-2 ml-4 md:ml-5">
-            {childrenIds.map((childId) =>
-              renderCommentTree(childId, depth + 1),
-            )}
-          </div>
-        )}
       </div>
     );
   };
@@ -828,9 +861,51 @@ export default function WatchPage() {
             </div>
           </form>
 
-          {/* Render Built Comments Tree */}
-          <div className="flex flex-col gap-5">
-            {roots.map((rootId) => renderCommentTree(rootId, 0))}
+          {/* Comments List */}
+          <div className="flex flex-col gap-6">
+            {rootComments.map((rootComment) => {
+              const threadReplies = repliesByParentId[rootComment._id] || [];
+              const isExpanded = expandedThreads[rootComment._id];
+
+              return (
+                <div
+                  key={rootComment._id}
+                  className="flex flex-col gap-2 border-b border-zinc-900/30 pb-4"
+                >
+                  {/* Root Comment Row */}
+                  {renderCommentRow(rootComment, false)}
+
+                  {/* Reply Toggle Actions — YouTube style */}
+                  {threadReplies.length > 0 && (
+                    <div className="pl-14">
+                      <button
+                        onClick={() => toggleThreadReplies(rootComment._id)}
+                        className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 mt-1"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <span>Hide {threadReplies.length} replies</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>View {threadReplies.length} replies</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* One-Level Nesting for Replies */}
+                  {isExpanded && threadReplies.length > 0 && (
+                    <div className="pl-12 border-l border-zinc-800/50 ml-5 mt-2 flex flex-col gap-4">
+                      {threadReplies.map((reply) =>
+                        renderCommentRow(reply, true),
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
