@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/services/api";
@@ -18,6 +18,9 @@ import {
   X,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
+
+// Matches a leading "@username " mention, e.g. "@johndoe nice video!"
+const MENTION_REGEX = /^@([a-zA-Z0-9_]+)\s+/;
 
 export default function WatchPage() {
   const { videoId } = useParams();
@@ -41,6 +44,48 @@ export default function WatchPage() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
   const replyInputRef = useRef(null);
+
+  // Groups the flat comments list into top-level comments + nested replies,
+  // by matching "@username" mentions back to a comment by that user.
+  // This is a frontend-only heuristic (no parentComment field in the DB),
+  // so it can occasionally misattribute a reply if usernames are ambiguous,
+  // but works correctly for the normal case.
+  const { topLevelComments, repliesByParentId } = useMemo(() => {
+    const byUserName = {};
+    comments.forEach((c) => {
+      const uname = c.owner?.userName;
+      if (!uname) return;
+      if (!byUserName[uname]) byUserName[uname] = [];
+      byUserName[uname].push(c);
+    });
+
+    const repliesMap = {};
+    const usedAsReply = new Set();
+
+    comments.forEach((c) => {
+      const match = c.content.match(MENTION_REGEX);
+      if (!match) return;
+
+      const mentionedUser = match[1].toLowerCase();
+      const candidates = (byUserName[mentionedUser] || []).filter(
+        (x) => x._id !== c._id,
+      );
+      if (candidates.length === 0) return;
+
+      // Prefer nesting under a top-level (non-reply) comment if one exists,
+      // so replies-to-replies still visually collapse one level deep, like YouTube.
+      const target =
+        candidates.find((x) => !MENTION_REGEX.test(x.content)) || candidates[0];
+
+      if (!repliesMap[target._id]) repliesMap[target._id] = [];
+      repliesMap[target._id].push(c);
+      usedAsReply.add(c._id);
+    });
+
+    const topLevel = comments.filter((c) => !usedAsReply.has(c._id));
+
+    return { topLevelComments: topLevel, repliesByParentId: repliesMap };
+  }, [comments]);
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
   const formatDuration = (secs) => {
@@ -99,7 +144,6 @@ export default function WatchPage() {
     async function loadData() {
       setLoading(true);
       try {
-        // Fetch current video
         const videoRes = await api.videos.getById(videoId);
         if (videoRes.success && videoRes.data) {
           const videoData = videoRes.data;
@@ -253,6 +297,138 @@ export default function WatchPage() {
       console.error(err);
     }
   };
+
+  // Shared renderer for a single comment row — used for both top-level
+  // comments and nested replies (replies just get extra indent + smaller avatar)
+  const renderComment = (comment, isReply = false) => (
+    <div
+      key={comment._id}
+      className={`flex gap-4 items-start group animate-fade-in ${
+        isReply ? "gap-3" : ""
+      }`}
+    >
+      <Link href={`/channel/${comment.owner?.userName}`}>
+        <img
+          src={
+            comment.owner?.avatar ||
+            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+          }
+          alt={comment.owner?.fullName}
+          className={`rounded-full object-cover border border-zinc-800 ${
+            isReply ? "w-7 h-7" : "w-9 h-9"
+          }`}
+        />
+      </Link>
+
+      <div className="flex-1 flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/channel/${comment.owner?.userName}`}
+              className={`font-bold text-zinc-200 hover:text-indigo-400 ${
+                isReply ? "text-xs" : "text-sm"
+              }`}
+            >
+              {comment.owner?.fullName}
+            </Link>
+            <span className="text-[10px] text-zinc-500">
+              {new Date(comment.createdAt).toLocaleDateString()}
+            </span>
+          </div>
+
+          {(user?.userName === comment.owner?.userName ||
+            user?._id === comment.owner?._id) && (
+            <button
+              onClick={() => handleCommentDelete(comment._id)}
+              className="text-zinc-600 hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-900 transition-all duration-200"
+              title="Delete Comment"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+        <p
+          className={`text-zinc-300 leading-relaxed font-light ${
+            isReply ? "text-xs" : "text-sm"
+          }`}
+        >
+          {/* Highlight the leading @mention, same as YouTube's reply style */}
+          {comment.content.match(MENTION_REGEX) ? (
+            <>
+              <span className="text-indigo-400 font-medium">
+                {comment.content.match(MENTION_REGEX)[0].trim()}
+              </span>{" "}
+              {comment.content.replace(MENTION_REGEX, "")}
+            </>
+          ) : (
+            comment.content
+          )}
+        </p>
+
+        {/* Reply trigger */}
+        <button
+          onClick={() => handleReplyClick(comment)}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors mt-1 self-start"
+        >
+          <Reply size={12} />
+          <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
+        </button>
+
+        {/* Inline reply box */}
+        {replyingTo === comment._id && (
+          <form
+            onSubmit={handleReplySubmit}
+            className="flex gap-2 mt-2 animate-fade-in"
+          >
+            <img
+              src={
+                user?.avatar ||
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+              }
+              alt={user?.fullName || "You"}
+              className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
+            />
+            <div className="flex-1 flex gap-2">
+              <input
+                ref={replyInputRef}
+                type="text"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="Write a reply..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+              />
+              <button
+                type="submit"
+                disabled={!replyText.trim()}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+              >
+                <Send size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyingTo(null);
+                  setReplyText("");
+                }}
+                className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Nested replies — indented under this comment, one level deep */}
+        {!isReply && repliesByParentId[comment._id]?.length > 0 && (
+          <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
+            {repliesByParentId[comment._id].map((reply) =>
+              renderComment(reply, true),
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -460,110 +636,9 @@ export default function WatchPage() {
             </div>
           </form>
 
-          {/* Comments List */}
+          {/* Comments List — top-level only; replies render nested inside renderComment */}
           <div className="flex flex-col gap-5">
-            {comments.map((comment) => (
-              <div
-                key={comment._id}
-                className="flex gap-4 items-start group animate-fade-in"
-              >
-                <Link href={`/channel/${comment.owner?.userName}`}>
-                  <img
-                    src={
-                      comment.owner?.avatar ||
-                      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-                    }
-                    alt={comment.owner?.fullName}
-                    className="w-9 h-9 rounded-full object-cover border border-zinc-800"
-                  />
-                </Link>
-
-                <div className="flex-1 flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/channel/${comment.owner?.userName}`}
-                        className="font-bold text-sm text-zinc-200 hover:text-indigo-400"
-                      >
-                        {comment.owner?.fullName}
-                      </Link>
-                      <span className="text-[10px] text-zinc-500">
-                        {new Date(comment.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-
-                    {(user?.userName === comment.owner?.userName ||
-                      user?._id === comment.owner?._id) && (
-                      <button
-                        onClick={() => handleCommentDelete(comment._id)}
-                        className="text-zinc-600 hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-900 transition-all duration-200"
-                        title="Delete Comment"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm text-zinc-300 leading-relaxed font-light">
-                    {comment.content}
-                  </p>
-
-                  {/* Reply trigger */}
-                  <button
-                    onClick={() => handleReplyClick(comment)}
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors mt-1 self-start"
-                  >
-                    <Reply size={12} />
-                    <span>
-                      {replyingTo === comment._id ? "Cancel" : "Reply"}
-                    </span>
-                  </button>
-
-                  {/* Inline reply box — only rendered for the comment being replied to */}
-                  {replyingTo === comment._id && (
-                    <form
-                      onSubmit={handleReplySubmit}
-                      className="flex gap-2 mt-2 animate-fade-in"
-                    >
-                      <img
-                        src={
-                          user?.avatar ||
-                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-                        }
-                        alt={user?.fullName || "You"}
-                        className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
-                      />
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          ref={replyInputRef}
-                          type="text"
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Write a reply..."
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!replyText.trim()}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                        >
-                          <Send size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReplyingTo(null);
-                            setReplyText("");
-                          }}
-                          className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
-            ))}
+            {topLevelComments.map((comment) => renderComment(comment, false))}
           </div>
         </div>
       </div>
