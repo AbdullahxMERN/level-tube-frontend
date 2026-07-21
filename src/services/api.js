@@ -195,16 +195,22 @@ export const api = {
   },
 
   // Comments
+
   comments: {
     getByVideo: (videoId) => request(`/comments/${videoId}`),
 
     add: (videoId, content) =>
       request(`/comments/${videoId}`, { method: "POST", body: { content } }),
 
-    delete: (commentId) =>
-      request(`/comments/${commentId}`, { method: "DELETE" }),
-  },
+    update: (commentId, content) =>
+      request(`/comments/c/${commentId}`, {
+        method: "PATCH",
+        body: { content },
+      }),
 
+    delete: (commentId) =>
+      request(`/comments/c/${commentId}`, { method: "DELETE" }), // fixed: was missing /c/
+  },
   // Tweets
   tweets: {
     getAll: () => request("/tweets"),
