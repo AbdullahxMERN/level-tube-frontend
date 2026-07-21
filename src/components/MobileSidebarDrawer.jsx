@@ -64,7 +64,21 @@ export default function MobileSidebarDrawer({ open, onClose }) {
         </div>
 
         <div className="p-4 border-t border-zinc-900 text-xs text-zinc-600">
-          <p>© 2026 LevelTube Inc.</p>
+          <p className="text-xs text-zinc-600">
+            © {new Date().getFullYear()} LevelTube Inc.
+          </p>
+
+          <p className="text-xs text-zinc-600 mt-1">
+            Made by{" "}
+            <a
+              href="https://github.com/AbdullahxMERN"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+            >
+              Abdullah
+            </a>
+          </p>
         </div>
       </div>
     </div>
