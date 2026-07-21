@@ -561,7 +561,7 @@ export default function WatchPage() {
     }));
   };
 
-  // Renders a single row item
+  // Renders a single row item with clearly structured, persistent buttons
   const renderCommentRow = (comment, isReply = false) => {
     const isLikedState = getCommentIsLiked(comment);
     const commentLikesCount = getCommentLikesCount(comment);
@@ -597,22 +597,23 @@ export default function WatchPage() {
               </span>
             </div>
 
+            {/* Structured action buttons instead of hidden hover classes */}
             {isOwnComment(comment) && (
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => handleEditClick(comment)}
-                  className="text-zinc-600 hover:text-indigo-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200"
+                  className="text-zinc-400 hover:text-indigo-400 p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-indigo-500/30 transition-all duration-200"
                   title="Edit Comment"
                 >
-                  <Pencil size={14} />
+                  <Pencil size={11} />
                 </button>
                 <button
                   onClick={() => handleCommentDelete(comment._id)}
                   disabled={deletingId === comment._id}
-                  className="text-zinc-600 hover:text-red-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
+                  className="text-zinc-400 hover:text-red-400 p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-red-500/30 transition-all duration-200 disabled:opacity-40"
                   title="Delete Comment"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={11} />
                 </button>
               </div>
             )}
