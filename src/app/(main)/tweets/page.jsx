@@ -61,9 +61,10 @@ export default function TweetsPage() {
       setTweets(prevTweets);
     }
   };
-
   const handleLikeTweet = async (tweetId) => {
     if (!user) return alert("Please sign in to interact");
+
+    const prevTweets = tweets; // snapshot for rollback
 
     setTweets((prev) =>
       prev.map((t) => {
@@ -82,9 +83,13 @@ export default function TweetsPage() {
     );
 
     try {
-      await api.likes.toggleTweet(tweetId);
+      const response = await api.likes.toggleTweet(tweetId);
+      if (!response.success) {
+        setTweets(prevTweets); // roll back on logical failure
+      }
     } catch (err) {
       console.error(err);
+      setTweets(prevTweets); // roll back on request failure
     }
   };
 
