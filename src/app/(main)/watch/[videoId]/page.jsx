@@ -45,11 +45,14 @@ export default function WatchPage() {
   const [replyText, setReplyText] = useState("");
   const replyInputRef = useRef(null);
 
+  // Delete state — track which comment id is currently being deleted, for UI feedback
+  const [deletingId, setDeletingId] = useState(null);
+
   // Groups the flat comments list into top-level comments + nested replies,
   // by matching "@username" mentions back to a comment by that user.
-  // This is a frontend-only heuristic (no parentComment field in the DB),
-  // so it can occasionally misattribute a reply if usernames are ambiguous,
-  // but works correctly for the normal case.
+  // Order is preserved from the `comments` array, and since new comments are
+  // prepended to that array on creation, new replies naturally end up first
+  // within their thread's replies list too.
   const { topLevelComments, repliesByParentId } = useMemo(() => {
     const byUserName = {};
     comments.forEach((c) => {
@@ -72,8 +75,6 @@ export default function WatchPage() {
       );
       if (candidates.length === 0) return;
 
-      // Prefer nesting under a top-level (non-reply) comment if one exists,
-      // so replies-to-replies still visually collapse one level deep, like YouTube.
       const target =
         candidates.find((x) => !MENTION_REGEX.test(x.content)) || candidates[0];
 
@@ -255,13 +256,22 @@ export default function WatchPage() {
   };
 
   const handleCommentDelete = async (commentId) => {
+    setDeletingId(commentId);
     try {
       const response = await api.comments.delete(commentId);
       if (response.success) {
         setComments((prev) => prev.filter((c) => c._id !== commentId));
+      } else {
+        console.error("Delete failed, server responded:", response);
+        alert(response.message || "Failed to delete comment");
       }
     } catch (err) {
-      console.error(err);
+      // This surfaces the real reason (401 unauthorized, 403 forbidden,
+      // 404 not found, network error, etc.) instead of failing silently.
+      console.error("Delete comment error:", err);
+      alert(err.message || "Failed to delete comment");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -289,6 +299,9 @@ export default function WatchPage() {
     try {
       const response = await api.comments.add(videoId, replyText);
       if (response.success && response.data) {
+        // Prepending here means this new reply will naturally sort to the
+        // top within its thread's replies list, since repliesByParentId
+        // preserves the order comments appear in this array.
         setComments((prev) => [response.data, ...prev]);
         setReplyText("");
         setReplyingTo(null);
@@ -296,6 +309,18 @@ export default function WatchPage() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Helper: safely compares a possibly-ObjectId value to the logged-in user,
+  // since Mongo _id fields are objects, not strings, so === can silently fail.
+  const isOwnComment = (comment) => {
+    if (!user) return false;
+    const ownerId = comment.owner?._id;
+    const ownerUserName = comment.owner?.userName;
+    return (
+      (ownerId && String(ownerId) === String(user._id)) ||
+      (ownerUserName && ownerUserName === user.userName)
+    );
   };
 
   // Shared renderer for a single comment row — used for both top-level
@@ -336,11 +361,11 @@ export default function WatchPage() {
             </span>
           </div>
 
-          {(user?.userName === comment.owner?.userName ||
-            user?._id === comment.owner?._id) && (
+          {isOwnComment(comment) && (
             <button
               onClick={() => handleCommentDelete(comment._id)}
-              className="text-zinc-600 hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-900 transition-all duration-200"
+              disabled={deletingId === comment._id}
+              className="text-zinc-600 hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
               title="Delete Comment"
             >
               <Trash2 size={14} />
@@ -365,7 +390,6 @@ export default function WatchPage() {
           )}
         </p>
 
-        {/* Reply trigger */}
         <button
           onClick={() => handleReplyClick(comment)}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors mt-1 self-start"
@@ -374,11 +398,26 @@ export default function WatchPage() {
           <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
         </button>
 
-        {/* Inline reply box */}
+        {/* Nested replies — rendered first, so the "new reply" input box
+            (below) always sits at the bottom of the thread */}
+        {!isReply && repliesByParentId[comment._id]?.length > 0 && (
+          <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
+            {repliesByParentId[comment._id].map((reply) =>
+              renderComment(reply, true),
+            )}
+          </div>
+        )}
+
+        {/* Inline reply box — now placed after existing replies, so it
+            appears at the bottom of the thread instead of at the top */}
         {replyingTo === comment._id && (
           <form
             onSubmit={handleReplySubmit}
-            className="flex gap-2 mt-2 animate-fade-in"
+            className={`flex gap-2 mt-3 animate-fade-in ${
+              !isReply && repliesByParentId[comment._id]?.length > 0
+                ? "pl-4"
+                : ""
+            }`}
           >
             <img
               src={
@@ -416,15 +455,6 @@ export default function WatchPage() {
               </button>
             </div>
           </form>
-        )}
-
-        {/* Nested replies — indented under this comment, one level deep */}
-        {!isReply && repliesByParentId[comment._id]?.length > 0 && (
-          <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
-            {repliesByParentId[comment._id].map((reply) =>
-              renderComment(reply, true),
-            )}
-          </div>
         )}
       </div>
     </div>
