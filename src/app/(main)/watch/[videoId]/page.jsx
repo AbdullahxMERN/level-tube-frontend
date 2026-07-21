@@ -11,7 +11,6 @@ import {
   Trash2,
   Calendar,
   Eye,
-  Heart,
   Check,
   Download,
   Reply,
@@ -22,6 +21,51 @@ import VideoCard from "@/components/VideoCard";
 
 // Matches a leading "@username " mention, e.g. "@johndoe nice video!"
 const MENTION_REGEX = /^@([a-zA-Z0-9_]+)\s+/;
+
+// Helper to determine the ultimate top-level parent ID for any given comment ID.
+// This prevents infinite reply nesting by ensuring all nested conversation lines
+// group cleanly under the original root thread.
+const findUltimateParentId = (commentId, allComments) => {
+  const commentMap = new Map(allComments.map((c) => [c._id, c]));
+  const parentOf = {};
+
+  allComments.forEach((c) => {
+    const explicitParentId = c.parentId || c.parent?._id || c.parent;
+    if (explicitParentId && commentMap.has(String(explicitParentId))) {
+      parentOf[c._id] = String(explicitParentId);
+    } else {
+      const match = c.content.match(MENTION_REGEX);
+      if (match) {
+        const mentionedUser = match[1].toLowerCase();
+        const candidates = allComments.filter(
+          (x) =>
+            x.owner?.userName?.toLowerCase() === mentionedUser &&
+            x._id !== c._id,
+        );
+        if (candidates.length > 0) {
+          const target =
+            candidates.find((x) => !MENTION_REGEX.test(x.content)) ||
+            candidates[candidates.length - 1];
+          if (commentMap.has(target._id)) {
+            parentOf[c._id] = target._id;
+          }
+        }
+      }
+    }
+  });
+
+  let current = commentId;
+  const visited = new Set();
+  while (
+    parentOf[current] &&
+    commentMap.has(parentOf[current]) &&
+    !visited.has(current)
+  ) {
+    visited.add(current);
+    current = parentOf[current];
+  }
+  return current;
+};
 
 export default function WatchPage() {
   const { videoId } = useParams();
@@ -60,42 +104,33 @@ export default function WatchPage() {
   // Video-like guard — prevents double-fire on the video like button
   const likingVideoRef = useRef(false);
 
-  // Groups the flat comments list into top-level comments + nested replies,
-  // by matching "@username" mentions back to a comment by that user.
-  // Order is preserved from the `comments` array, and since new comments are
-  // prepended to that array on creation, new replies naturally end up first
-  // within their thread's replies list too.
+  // Groups the flat comments list into top-level comments + nested replies.
+  // Order is preserved, and replies inside a thread are sorted chronologically.
   const { topLevelComments, repliesByParentId } = useMemo(() => {
-    const byUserName = {};
-    comments.forEach((c) => {
-      const uname = c.owner?.userName;
-      if (!uname) return;
-      if (!byUserName[uname]) byUserName[uname] = [];
-      byUserName[uname].push(c);
-    });
-
+    const topLevel = [];
     const repliesMap = {};
-    const usedAsReply = new Set();
 
     comments.forEach((c) => {
-      const match = c.content.match(MENTION_REGEX);
-      if (!match) return;
-
-      const mentionedUser = match[1].toLowerCase();
-      const candidates = (byUserName[mentionedUser] || []).filter(
-        (x) => x._id !== c._id,
-      );
-      if (candidates.length === 0) return;
-
-      const target =
-        candidates.find((x) => !MENTION_REGEX.test(x.content)) || candidates[0];
-
-      if (!repliesMap[target._id]) repliesMap[target._id] = [];
-      repliesMap[target._id].push(c);
-      usedAsReply.add(c._id);
+      const ancestorId = findUltimateParentId(c._id, comments);
+      if (ancestorId === c._id) {
+        topLevel.push(c);
+      } else {
+        if (!repliesMap[ancestorId]) {
+          repliesMap[ancestorId] = [];
+        }
+        if (!repliesMap[ancestorId].some((r) => r._id === c._id)) {
+          repliesMap[ancestorId].push(c);
+        }
+      }
     });
 
-    const topLevel = comments.filter((c) => !usedAsReply.has(c._id));
+    // Sort replies inside threads by oldest first (YouTube style)
+    Object.keys(repliesMap).forEach((parentId) => {
+      repliesMap[parentId].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+    });
 
     return { topLevelComments: topLevel, repliesByParentId: repliesMap };
   }, [comments]);
@@ -161,9 +196,6 @@ export default function WatchPage() {
         if (videoRes.success && videoRes.data) {
           const videoData = videoRes.data;
           setVideo(videoData);
-          // Read the persisted like state straight from the video response,
-          // so refresh always reflects the true DB value instead of
-          // defaulting to false every time.
           setIsLiked(videoData.isLiked || false);
 
           if (videoData.owner?.userName) {
@@ -207,7 +239,7 @@ export default function WatchPage() {
 
   const handleLikeToggle = async () => {
     if (!user) return alert("Please sign in to like videos");
-    if (likingVideoRef.current) return; // block double-fire
+    if (likingVideoRef.current) return;
     likingVideoRef.current = true;
 
     const prevLiked = isLiked;
@@ -216,11 +248,11 @@ export default function WatchPage() {
     try {
       const response = await api.likes.toggleVideo(videoId);
       if (!response.success) {
-        setIsLiked(prevLiked); // rollback on logical failure
+        setIsLiked(prevLiked);
       }
     } catch (err) {
       console.error(err);
-      setIsLiked(prevLiked); // rollback on request failure
+      setIsLiked(prevLiked);
     } finally {
       likingVideoRef.current = false;
     }
@@ -293,8 +325,6 @@ export default function WatchPage() {
         alert(response.message || "Failed to delete comment");
       }
     } catch (err) {
-      // This surfaces the real reason (401 unauthorized, 403 forbidden,
-      // 404 not found, network error, etc.) instead of failing silently.
       console.error("Delete comment error:", err);
       alert(err.message || "Failed to delete comment");
     } finally {
@@ -323,13 +353,18 @@ export default function WatchPage() {
     if (!user) return alert("Please sign in to reply");
     if (!replyText.trim()) return;
 
+    // Resolve the ultimate ancestor so the frontend can group it correctly in state
+    const targetId = replyingTo;
+    const parentId = findUltimateParentId(targetId, comments);
+
     try {
-      const response = await api.comments.add(videoId, replyText);
+      const response = await api.comments.add(videoId, replyText, parentId);
       if (response.success && response.data) {
-        // Prepending here means this new reply will naturally sort to the
-        // top within its thread's replies list, since repliesByParentId
-        // preserves the order comments appear in this array.
-        setComments((prev) => [response.data, ...prev]);
+        const replyWithParent = {
+          ...response.data,
+          parentId: parentId,
+        };
+        setComments((prev) => [replyWithParent, ...prev]);
         setReplyText("");
         setReplyingTo(null);
       }
@@ -371,9 +406,7 @@ export default function WatchPage() {
     }
   };
 
-  // Toggles like on a single comment, with optimistic update + rollback and
-  // a per-comment guard to block a double-fire from netting the DB back to
-  // "unliked" (same fix pattern as tweet likes).
+  // Toggles like on a single comment, with optimistic update + rollback
   const handleCommentLikeToggle = async (commentId) => {
     if (!user) return alert("Please sign in to like comments");
     if (likingCommentRef.current.has(commentId)) return;
@@ -400,18 +433,16 @@ export default function WatchPage() {
     try {
       const response = await api.likes.toggleComment(commentId);
       if (!response.success) {
-        setComments(prevComments); // rollback on logical failure
+        setComments(prevComments);
       }
     } catch (err) {
       console.error(err);
-      setComments(prevComments); // rollback on request failure
+      setComments(prevComments);
     } finally {
       likingCommentRef.current.delete(commentId);
     }
   };
 
-  // Helper: safely compares a possibly-ObjectId value to the logged-in user,
-  // since Mongo _id fields are objects, not strings, so === can silently fail.
   const isOwnComment = (comment) => {
     if (!user) return false;
     const ownerId = comment.owner?._id;
@@ -422,8 +453,7 @@ export default function WatchPage() {
     );
   };
 
-  // Shared renderer for a single comment row — used for both top-level
-  // comments and nested replies (replies just get extra indent + smaller avatar)
+  // Shared renderer for a single comment row
   const renderComment = (comment, isReply = false) => {
     const commentLikesCount =
       typeof comment.likesCount === "number" && !isNaN(comment.likesCount)
@@ -521,7 +551,6 @@ export default function WatchPage() {
                 isReply ? "text-xs" : "text-sm"
               }`}
             >
-              {/* Highlight the leading @mention, same as YouTube's reply style */}
               {comment.content.match(MENTION_REGEX) ? (
                 <>
                   <span className="text-indigo-400 font-medium">
@@ -535,35 +564,36 @@ export default function WatchPage() {
             </p>
           )}
 
+          {/* Comment Action Buttons */}
           <div className="flex items-center gap-4 mt-1">
+            {/* Thumbs-Up Comment Like Button */}
             <button
               onClick={() => handleCommentLikeToggle(comment._id)}
-              aria-label={comment.isLiked ? "Unlike" : "Like"}
-              className={`flex items-center gap-1.5 text-[11px] font-semibold transition-colors self-start ${
+              aria-label={comment.isLiked ? "Unlike comment" : "Like comment"}
+              className={`flex items-center gap-1.5 text-[11px] font-semibold transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50 ${
                 comment.isLiked
-                  ? "text-pink-500"
-                  : "text-zinc-500 hover:text-pink-500"
+                  ? "text-indigo-400"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              <Heart
+              <ThumbsUp
                 size={12}
                 fill={comment.isLiked ? "currentColor" : "none"}
-                strokeWidth={comment.isLiked ? 0 : 2}
+                className="transition-transform active:scale-125 duration-200"
               />
               <span>{commentLikesCount}</span>
             </button>
 
             <button
               onClick={() => handleReplyClick(comment)}
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors self-start"
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors self-start py-1 px-2 rounded-full hover:bg-zinc-900/50"
             >
               <Reply size={12} />
               <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
             </button>
           </div>
 
-          {/* Nested replies — rendered first, so the "new reply" input box
-              (below) always sits at the bottom of the thread */}
+          {/* Nested replies rendered sequentially directly under the parent thread */}
           {!isReply && repliesByParentId[comment._id]?.length > 0 && (
             <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
               {repliesByParentId[comment._id].map((reply) =>
@@ -572,8 +602,7 @@ export default function WatchPage() {
             </div>
           )}
 
-          {/* Inline reply box — now placed after existing replies, so it
-              appears at the bottom of the thread instead of at the top */}
+          {/* Inline reply box — rendered at the bottom of the active thread */}
           {replyingTo === comment._id && (
             <form
               onSubmit={handleReplySubmit}
@@ -784,7 +813,9 @@ export default function WatchPage() {
           </div>
 
           <p
-            className={`text-sm text-zinc-300 leading-relaxed whitespace-pre-line ${!descExpanded && "line-clamp-3"}`}
+            className={`text-sm text-zinc-300 leading-relaxed whitespace-pre-line ${
+              !descExpanded && "line-clamp-3"
+            }`}
           >
             {video.description}
           </p>
@@ -831,7 +862,7 @@ export default function WatchPage() {
             </div>
           </form>
 
-          {/* Comments List — top-level only; replies render nested inside renderComment */}
+          {/* Comments List */}
           <div className="flex flex-col gap-5">
             {topLevelComments.map((comment) => renderComment(comment, false))}
           </div>
