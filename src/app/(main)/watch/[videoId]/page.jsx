@@ -16,6 +16,7 @@ import {
   Download,
   Reply,
   X,
+  Pencil,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
 
@@ -47,6 +48,17 @@ export default function WatchPage() {
 
   // Delete state — track which comment id is currently being deleted, for UI feedback
   const [deletingId, setDeletingId] = useState(null);
+
+  // Edit state — track which comment is being edited, and the draft text
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Comment-like guard — prevents double-fire per comment (create/delete race)
+  const likingCommentRef = useRef(new Set());
+
+  // Video-like guard — prevents double-fire on the video like button
+  const likingVideoRef = useRef(false);
 
   // Groups the flat comments list into top-level comments + nested replies,
   // by matching "@username" mentions back to a comment by that user.
@@ -149,6 +161,10 @@ export default function WatchPage() {
         if (videoRes.success && videoRes.data) {
           const videoData = videoRes.data;
           setVideo(videoData);
+          // Read the persisted like state straight from the video response,
+          // so refresh always reflects the true DB value instead of
+          // defaulting to false every time.
+          setIsLiked(videoData.isLiked || false);
 
           if (videoData.owner?.userName) {
             try {
@@ -191,11 +207,22 @@ export default function WatchPage() {
 
   const handleLikeToggle = async () => {
     if (!user) return alert("Please sign in to like videos");
+    if (likingVideoRef.current) return; // block double-fire
+    likingVideoRef.current = true;
+
+    const prevLiked = isLiked;
     setIsLiked(!isLiked);
+
     try {
-      await api.likes.toggleVideo(videoId);
+      const response = await api.likes.toggleVideo(videoId);
+      if (!response.success) {
+        setIsLiked(prevLiked); // rollback on logical failure
+      }
     } catch (err) {
       console.error(err);
+      setIsLiked(prevLiked); // rollback on request failure
+    } finally {
+      likingVideoRef.current = false;
     }
   };
 
@@ -311,6 +338,78 @@ export default function WatchPage() {
     }
   };
 
+  // Opens/closes the inline edit box for a comment, pre-filled with its content
+  const handleEditClick = (comment) => {
+    if (editingId === comment._id) {
+      setEditingId(null);
+      setEditText("");
+      return;
+    }
+    setEditingId(comment._id);
+    setEditText(comment.content);
+  };
+
+  const handleEditSave = async (commentId) => {
+    if (!editText.trim()) return;
+    setSavingEdit(true);
+    try {
+      const response = await api.comments.update(commentId, editText.trim());
+      if (response.success && response.data) {
+        setComments((prev) =>
+          prev.map((c) => (c._id === commentId ? response.data : c)),
+        );
+        setEditingId(null);
+        setEditText("");
+      } else {
+        alert(response.message || "Failed to update comment");
+      }
+    } catch (err) {
+      console.error("Edit comment error:", err);
+      alert(err.message || "Failed to update comment");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Toggles like on a single comment, with optimistic update + rollback and
+  // a per-comment guard to block a double-fire from netting the DB back to
+  // "unliked" (same fix pattern as tweet likes).
+  const handleCommentLikeToggle = async (commentId) => {
+    if (!user) return alert("Please sign in to like comments");
+    if (likingCommentRef.current.has(commentId)) return;
+    likingCommentRef.current.add(commentId);
+
+    const prevComments = comments;
+
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c._id !== commentId) return c;
+        const nextLiked = !c.isLiked;
+        const currentCount =
+          typeof c.likesCount === "number" && !isNaN(c.likesCount)
+            ? c.likesCount
+            : 0;
+        return {
+          ...c,
+          isLiked: nextLiked,
+          likesCount: Math.max(0, currentCount + (nextLiked ? 1 : -1)),
+        };
+      }),
+    );
+
+    try {
+      const response = await api.likes.toggleComment(commentId);
+      if (!response.success) {
+        setComments(prevComments); // rollback on logical failure
+      }
+    } catch (err) {
+      console.error(err);
+      setComments(prevComments); // rollback on request failure
+    } finally {
+      likingCommentRef.current.delete(commentId);
+    }
+  };
+
   // Helper: safely compares a possibly-ObjectId value to the logged-in user,
   // since Mongo _id fields are objects, not strings, so === can silently fail.
   const isOwnComment = (comment) => {
@@ -325,140 +424,206 @@ export default function WatchPage() {
 
   // Shared renderer for a single comment row — used for both top-level
   // comments and nested replies (replies just get extra indent + smaller avatar)
-  const renderComment = (comment, isReply = false) => (
-    <div
-      key={comment._id}
-      className={`flex gap-4 items-start group animate-fade-in ${
-        isReply ? "gap-3" : ""
-      }`}
-    >
-      <Link href={`/channel/${comment.owner?.userName}`}>
-        <img
-          src={
-            comment.owner?.avatar ||
-            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-          }
-          alt={comment.owner?.fullName}
-          className={`rounded-full object-cover border border-zinc-800 ${
-            isReply ? "w-7 h-7" : "w-9 h-9"
-          }`}
-        />
-      </Link>
+  const renderComment = (comment, isReply = false) => {
+    const commentLikesCount =
+      typeof comment.likesCount === "number" && !isNaN(comment.likesCount)
+        ? comment.likesCount
+        : 0;
 
-      <div className="flex-1 flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/channel/${comment.owner?.userName}`}
-              className={`font-bold text-zinc-200 hover:text-indigo-400 ${
+    return (
+      <div
+        key={comment._id}
+        className={`flex gap-4 items-start group animate-fade-in ${
+          isReply ? "gap-3" : ""
+        }`}
+      >
+        <Link href={`/channel/${comment.owner?.userName}`}>
+          <img
+            src={
+              comment.owner?.avatar ||
+              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+            }
+            alt={comment.owner?.fullName}
+            className={`rounded-full object-cover border border-zinc-800 ${
+              isReply ? "w-7 h-7" : "w-9 h-9"
+            }`}
+          />
+        </Link>
+
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/channel/${comment.owner?.userName}`}
+                className={`font-bold text-zinc-200 hover:text-indigo-400 ${
+                  isReply ? "text-xs" : "text-sm"
+                }`}
+              >
+                {comment.owner?.fullName}
+              </Link>
+              <span className="text-[10px] text-zinc-500">
+                {new Date(comment.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+
+            {isOwnComment(comment) && (
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <button
+                  onClick={() => handleEditClick(comment)}
+                  className="text-zinc-600 hover:text-indigo-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200"
+                  title="Edit Comment"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => handleCommentDelete(comment._id)}
+                  disabled={deletingId === comment._id}
+                  className="text-zinc-600 hover:text-red-400 p-1 rounded-md hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
+                  title="Delete Comment"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {editingId === comment._id ? (
+            <div className="flex flex-col gap-2 mt-1">
+              <input
+                type="text"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEditSave(comment._id)}
+                  disabled={savingEdit || !editText.trim()}
+                  className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 disabled:opacity-40"
+                >
+                  {savingEdit ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingId(null);
+                    setEditText("");
+                  }}
+                  className="text-xs font-semibold text-zinc-500 hover:text-zinc-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p
+              className={`text-zinc-300 leading-relaxed font-light ${
                 isReply ? "text-xs" : "text-sm"
               }`}
             >
-              {comment.owner?.fullName}
-            </Link>
-            <span className="text-[10px] text-zinc-500">
-              {new Date(comment.createdAt).toLocaleDateString()}
-            </span>
+              {/* Highlight the leading @mention, same as YouTube's reply style */}
+              {comment.content.match(MENTION_REGEX) ? (
+                <>
+                  <span className="text-indigo-400 font-medium">
+                    {comment.content.match(MENTION_REGEX)[0].trim()}
+                  </span>{" "}
+                  {comment.content.replace(MENTION_REGEX, "")}
+                </>
+              ) : (
+                comment.content
+              )}
+            </p>
+          )}
+
+          <div className="flex items-center gap-4 mt-1">
+            <button
+              onClick={() => handleCommentLikeToggle(comment._id)}
+              aria-label={comment.isLiked ? "Unlike" : "Like"}
+              className={`flex items-center gap-1.5 text-[11px] font-semibold transition-colors self-start ${
+                comment.isLiked
+                  ? "text-pink-500"
+                  : "text-zinc-500 hover:text-pink-500"
+              }`}
+            >
+              <Heart
+                size={12}
+                fill={comment.isLiked ? "currentColor" : "none"}
+                strokeWidth={comment.isLiked ? 0 : 2}
+              />
+              <span>{commentLikesCount}</span>
+            </button>
+
+            <button
+              onClick={() => handleReplyClick(comment)}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors self-start"
+            >
+              <Reply size={12} />
+              <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
+            </button>
           </div>
 
-          {isOwnComment(comment) && (
-            <button
-              onClick={() => handleCommentDelete(comment._id)}
-              disabled={deletingId === comment._id}
-              className="text-zinc-600 hover:text-red-400 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
-              title="Delete Comment"
+          {/* Nested replies — rendered first, so the "new reply" input box
+              (below) always sits at the bottom of the thread */}
+          {!isReply && repliesByParentId[comment._id]?.length > 0 && (
+            <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
+              {repliesByParentId[comment._id].map((reply) =>
+                renderComment(reply, true),
+              )}
+            </div>
+          )}
+
+          {/* Inline reply box — now placed after existing replies, so it
+              appears at the bottom of the thread instead of at the top */}
+          {replyingTo === comment._id && (
+            <form
+              onSubmit={handleReplySubmit}
+              className={`flex gap-2 mt-3 animate-fade-in ${
+                !isReply && repliesByParentId[comment._id]?.length > 0
+                  ? "pl-4"
+                  : ""
+              }`}
             >
-              <Trash2 size={14} />
-            </button>
+              <img
+                src={
+                  user?.avatar ||
+                  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+                }
+                alt={user?.fullName || "You"}
+                className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
+              />
+              <div className="flex-1 flex gap-2">
+                <input
+                  ref={replyInputRef}
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a reply..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+                />
+                <button
+                  type="submit"
+                  disabled={!replyText.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                >
+                  <Send size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyingTo(null);
+                    setReplyText("");
+                  }}
+                  className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </form>
           )}
         </div>
-        <p
-          className={`text-zinc-300 leading-relaxed font-light ${
-            isReply ? "text-xs" : "text-sm"
-          }`}
-        >
-          {/* Highlight the leading @mention, same as YouTube's reply style */}
-          {comment.content.match(MENTION_REGEX) ? (
-            <>
-              <span className="text-indigo-400 font-medium">
-                {comment.content.match(MENTION_REGEX)[0].trim()}
-              </span>{" "}
-              {comment.content.replace(MENTION_REGEX, "")}
-            </>
-          ) : (
-            comment.content
-          )}
-        </p>
-
-        <button
-          onClick={() => handleReplyClick(comment)}
-          className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-500 hover:text-indigo-400 transition-colors mt-1 self-start"
-        >
-          <Reply size={12} />
-          <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
-        </button>
-
-        {/* Nested replies — rendered first, so the "new reply" input box
-            (below) always sits at the bottom of the thread */}
-        {!isReply && repliesByParentId[comment._id]?.length > 0 && (
-          <div className="flex flex-col gap-4 mt-3 pl-4 border-l-2 border-zinc-900">
-            {repliesByParentId[comment._id].map((reply) =>
-              renderComment(reply, true),
-            )}
-          </div>
-        )}
-
-        {/* Inline reply box — now placed after existing replies, so it
-            appears at the bottom of the thread instead of at the top */}
-        {replyingTo === comment._id && (
-          <form
-            onSubmit={handleReplySubmit}
-            className={`flex gap-2 mt-3 animate-fade-in ${
-              !isReply && repliesByParentId[comment._id]?.length > 0
-                ? "pl-4"
-                : ""
-            }`}
-          >
-            <img
-              src={
-                user?.avatar ||
-                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-              }
-              alt={user?.fullName || "You"}
-              className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
-            />
-            <div className="flex-1 flex gap-2">
-              <input
-                ref={replyInputRef}
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Write a reply..."
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
-              />
-              <button
-                type="submit"
-                disabled={!replyText.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-              >
-                <Send size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setReplyingTo(null);
-                  setReplyText("");
-                }}
-                className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-              >
-                <X size={13} />
-              </button>
-            </div>
-          </form>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
