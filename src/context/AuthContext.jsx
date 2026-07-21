@@ -91,6 +91,24 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const googleLogin = async (idToken) => {
+    setLoading(true);
+    try {
+      const response = await api.auth.googleLogin(idToken);
+      if (response.success && response.data) {
+        setUser(response.data.user);
+        setToken(response.data.accessToken);
+        router.push("/");
+        return { success: true };
+      }
+      return { success: false, error: response.message };
+    } catch (err) {
+      return { success: false, error: err.message || "Google sign-in failed" };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     try {
@@ -121,7 +139,16 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout, refreshUser }}
+      value={{
+        user,
+        token,
+        loading,
+        login,
+        register,
+        googleLogin,
+        logout,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

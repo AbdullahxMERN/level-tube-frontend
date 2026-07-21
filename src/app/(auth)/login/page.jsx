@@ -2,16 +2,13 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { LogIn, Mail, Lock } from "lucide-react";
 import Logo from "@/components/Logo";
 import { signInWithGoogle } from "@/lib/firebase";
-import { api } from "@/services/api";
 
 export default function LoginPage() {
-  const { login } = useAuth();
-  const router = useRouter();
+  const { login, googleLogin } = useAuth();
   const [emailOrUsername, setEmailOrUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -39,13 +36,9 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const idToken = await signInWithGoogle();
-      const res = await api.auth.googleLogin(idToken);
-      if (res.success) {
-        router.push("/");
-        // Refresh so AuthContext picks up the newly stored user/token
-        router.refresh();
-      } else {
-        setError(res.message || "Google sign-in failed");
+      const result = await googleLogin(idToken);
+      if (!result.success) {
+        setError(result.error || "Google sign-in failed");
       }
     } catch (err) {
       console.error(err);

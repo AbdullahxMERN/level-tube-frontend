@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import {
   User,
@@ -14,11 +13,9 @@ import {
 } from "lucide-react";
 import Logo from "@/components/Logo";
 import { signInWithGoogle } from "@/lib/firebase";
-import { api } from "@/services/api";
 
 export default function RegisterPage() {
-  const { register } = useAuth();
-  const router = useRouter();
+  const { register, googleLogin } = useAuth();
   const [fullName, setFullName] = useState("");
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
@@ -63,12 +60,9 @@ export default function RegisterPage() {
     setGoogleLoading(true);
     try {
       const idToken = await signInWithGoogle();
-      const res = await api.auth.googleLogin(idToken);
-      if (res.success) {
-        router.push("/");
-        router.refresh();
-      } else {
-        setError(res.message || "Google sign-up failed");
+      const result = await googleLogin(idToken);
+      if (!result.success) {
+        setError(result.error || "Google sign-up failed");
       }
     } catch (err) {
       console.error(err);
