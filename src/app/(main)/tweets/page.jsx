@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { api } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import { Heart, Send, Trash2, MessageSquare, Loader2 } from "lucide-react";
@@ -12,6 +12,7 @@ export default function TweetsPage() {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [newTweetContent, setNewTweetContent] = useState("");
+  const likingRef = useRef(new Set()); // tracks tweetIds currently being toggled
 
   const loadTweets = async () => {
     setLoading(true);
@@ -61,10 +62,13 @@ export default function TweetsPage() {
       setTweets(prevTweets);
     }
   };
+
   const handleLikeTweet = async (tweetId) => {
     if (!user) return alert("Please sign in to interact");
+    if (likingRef.current.has(tweetId)) return; // block double-fire
+    likingRef.current.add(tweetId);
 
-    const prevTweets = tweets; // snapshot for rollback
+    const prevTweets = tweets;
 
     setTweets((prev) =>
       prev.map((t) => {
@@ -85,11 +89,13 @@ export default function TweetsPage() {
     try {
       const response = await api.likes.toggleTweet(tweetId);
       if (!response.success) {
-        setTweets(prevTweets); // roll back on logical failure
+        setTweets(prevTweets); // rollback on logical failure
       }
     } catch (err) {
       console.error(err);
-      setTweets(prevTweets); // roll back on request failure
+      setTweets(prevTweets); // rollback on request failure
+    } finally {
+      likingRef.current.delete(tweetId); // release lock
     }
   };
 
@@ -99,7 +105,6 @@ export default function TweetsPage() {
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col pb-16 animate-fade-in">
-      {/* Sticky header */}
       <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900">
         <MessageSquare size={22} className="text-indigo-400 flex-shrink-0" />
         <h1 className="text-lg sm:text-xl font-bold text-zinc-100">
@@ -107,7 +112,6 @@ export default function TweetsPage() {
         </h1>
       </div>
 
-      {/* Composer */}
       {user ? (
         <form
           onSubmit={handleSubmitTweet}
@@ -166,7 +170,6 @@ export default function TweetsPage() {
         </div>
       )}
 
-      {/* Tweets list */}
       {loading ? (
         <div className="flex flex-col">
           {[...Array(4)].map((_, i) => (
@@ -232,10 +235,7 @@ export default function TweetsPage() {
                       <span className="text-xs sm:text-sm text-zinc-600 whitespace-nowrap">
                         {new Date(tweet.createdAt).toLocaleDateString(
                           undefined,
-                          {
-                            month: "short",
-                            day: "numeric",
-                          },
+                          { month: "short", day: "numeric" },
                         )}
                       </span>
                     </div>
