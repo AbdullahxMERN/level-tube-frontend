@@ -202,6 +202,15 @@ export const api = {
     add: (videoId, content) =>
       request(`/comments/${videoId}`, { method: "POST", body: { content } }),
 
+    addReply: (commentId, content) =>
+      request(`/comments/c/${commentId}/reply`, {
+        method: "POST",
+        body: { content },
+      }),
+
+    getReplies: (commentId) =>
+      request(`/comments/c/${commentId}/replies`),
+
     update: (commentId, content) =>
       request(`/comments/c/${commentId}`, {
         method: "PATCH",
@@ -209,7 +218,7 @@ export const api = {
       }),
 
     delete: (commentId) =>
-      request(`/comments/c/${commentId}`, { method: "DELETE" }), // fixed: was missing /c/
+      request(`/comments/c/${commentId}`, { method: "DELETE" }),
   },
   // Tweets
   tweets: {

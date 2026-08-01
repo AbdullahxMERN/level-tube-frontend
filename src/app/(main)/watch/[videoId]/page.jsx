@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/services/api";
@@ -11,16 +11,14 @@ import {
   Trash2,
   Calendar,
   Eye,
-  Check,
   Download,
   Reply,
   X,
   Pencil,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
-
-// Matches a leading "@username " mention, e.g. "@johndoe nice video!"
-const MENTION_REGEX = /^@([a-zA-Z0-9_]+)\s+/;
 
 export default function WatchPage() {
   const { videoId } = useParams();
@@ -45,132 +43,22 @@ export default function WatchPage() {
   const [replyText, setReplyText] = useState("");
   const replyInputRef = useRef(null);
 
-  // Delete state — track which comment id is currently being deleted, for UI feedback
+  // Delete state — track which comment id is currently being deleted
   const [deletingId, setDeletingId] = useState(null);
 
-  // Edit state — track which comment is being edited, and the draft text
+  // Edit state — track which comment is being edited
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Comment-like guard — prevents double-fire per comment (create/delete race)
+  // Like guard — prevents double-fire
   const likingCommentRef = useRef(new Set());
-
-  // Video-like guard — prevents double-fire on the video like button
   const likingVideoRef = useRef(false);
 
-  // Tracks which comment threads have their replies expanded (YouTube style)
+  // Replies state — stores fetched replies per comment, and expanded toggle
+  const [repliesByComment, setRepliesByComment] = useState({});
   const [expandedThreads, setExpandedThreads] = useState({});
-
-  // Client-side persistence fallback to hold liked comment IDs across refreshes
-  const [localLikedComments, setLocalLikedComments] = useState(new Set());
-
-  // Load persistent user liked comments from local storage
-  useEffect(() => {
-    if (user?._id) {
-      const stored = localStorage.getItem(`likedComments_${user._id}`);
-      if (stored) {
-        try {
-          setLocalLikedComments(new Set(JSON.parse(stored)));
-        } catch (e) {
-          console.error("Failed to parse local comment likes", e);
-        }
-      }
-    }
-  }, [user]);
-
-  // Safe helper to extract likes count from multiple possible backend formats (numeric or array fields)
-  const getCommentLikesCount = (comment) => {
-    if (typeof comment.likesCount === "number") return comment.likesCount;
-    if (Array.isArray(comment.likes)) return comment.likes.length;
-    if (typeof comment.likes === "number") return comment.likes;
-    return 0;
-  };
-
-  // Safe helper to extract like state depending on local storage or back-end format
-  const getCommentIsLiked = (comment) => {
-    // Check locally saved state first (persists even if public comment endpoint is unauthenticated)
-    if (user?._id && localLikedComments.has(comment._id)) {
-      return true;
-    }
-    if (typeof comment.isLiked === "boolean") return comment.isLiked;
-    if (Array.isArray(comment.likes) && user) {
-      return comment.likes.some((like) => {
-        const likedBy = like.likedBy || like.owner || like || {};
-        const likedById =
-          typeof likedBy === "object" ? likedBy._id || likedBy : likedBy;
-        return String(likedById) === String(user._id);
-      });
-    }
-    return false;
-  };
-
-  // Groups comments into 1-level-deep root threads (like YouTube).
-  // Matches replies strictly to the closest preceding root comment by that user.
-  const { rootComments, repliesByParentId } = useMemo(() => {
-    const sorted = [...comments].sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-
-    const roots = [];
-    const repliesMap = {};
-
-    // First pass: register root comments (comments that don't start with a mention)
-    sorted.forEach((c) => {
-      if (!MENTION_REGEX.test(c.content)) {
-        roots.push(c);
-        repliesMap[c._id] = [];
-      }
-    });
-
-    // Second pass: map replies to the correct root thread
-    sorted.forEach((c, idx) => {
-      const match = c.content.match(MENTION_REGEX);
-      if (match) {
-        const mentionedUser = match[1].toLowerCase();
-        let parentId = null;
-
-        // Walk backwards to find the closest root comment written by the mentioned user
-        for (let i = idx - 1; i >= 0; i--) {
-          const candidate = sorted[i];
-          if (
-            !MENTION_REGEX.test(candidate.content) &&
-            candidate.owner?.userName?.toLowerCase() === mentionedUser
-          ) {
-            parentId = candidate._id;
-            break;
-          }
-        }
-
-        // Fallback: if no root comment matches, assign to closest root comment chronologically
-        if (!parentId) {
-          for (let i = idx - 1; i >= 0; i--) {
-            if (!MENTION_REGEX.test(sorted[i].content)) {
-              parentId = sorted[i]._id;
-              break;
-            }
-          }
-        }
-
-        if (parentId && repliesMap[parentId]) {
-          repliesMap[parentId].push(c);
-        } else {
-          // Fallback root assignment
-          roots.push(c);
-          repliesMap[c._id] = [];
-        }
-      }
-    });
-
-    // Sort root threads descending (newest comments on top)
-    roots.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-
-    return { rootComments: roots, repliesByParentId: repliesMap };
-  }, [comments]);
+  const [loadingReplies, setLoadingReplies] = useState({});
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
   const formatDuration = (secs) => {
@@ -253,37 +141,10 @@ export default function WatchPage() {
           }
         }
 
+        // Comments now come with likesCount, isLiked, replyCount from the DB
         const commentsRes = await api.comments.getByVideo(videoId);
         if (commentsRes.success && commentsRes.data) {
-          const fetchedComments = commentsRes.data;
-          setComments(fetchedComments);
-
-          // Synchronize database records with local storage liked indices
-          if (user?._id) {
-            const syncedSet = new Set(localLikedComments);
-            fetchedComments.forEach((c) => {
-              const dbLiked =
-                c.isLiked === true ||
-                (Array.isArray(c.likes) &&
-                  c.likes.some((like) => {
-                    const likedBy = like.likedBy || like.owner || like || {};
-                    const likedById =
-                      typeof likedBy === "object"
-                        ? likedBy._id || likedBy
-                        : likedBy;
-                    return String(likedById) === String(user._id);
-                  }));
-
-              if (dbLiked) {
-                syncedSet.add(c._id);
-              }
-            });
-            setLocalLikedComments(syncedSet);
-            localStorage.setItem(
-              `likedComments_${user._id}`,
-              JSON.stringify(Array.from(syncedSet)),
-            );
-          }
+          setComments(commentsRes.data);
         }
 
         const allVideosRes = await api.videos.getAll();
@@ -363,6 +224,8 @@ export default function WatchPage() {
     }
   };
 
+  // ─── Comment CRUD ─────────────────────────────────────────────
+
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!user) return alert("Please sign in to comment");
@@ -371,6 +234,7 @@ export default function WatchPage() {
     try {
       const response = await api.comments.add(videoId, newComment);
       if (response.success && response.data) {
+        // New root comment — prepend to list
         setComments((prev) => [response.data, ...prev]);
         setNewComment("");
       }
@@ -379,20 +243,34 @@ export default function WatchPage() {
     }
   };
 
-  const handleCommentDelete = async (commentId) => {
+  const handleCommentDelete = async (commentId, isReply = false, parentId = null) => {
     setDeletingId(commentId);
     try {
       const response = await api.comments.delete(commentId);
       if (response.success) {
-        setComments((prev) => prev.filter((c) => c._id !== commentId));
-        if (user?._id) {
-          const updatedSet = new Set(localLikedComments);
-          updatedSet.delete(commentId);
-          setLocalLikedComments(updatedSet);
-          localStorage.setItem(
-            `likedComments_${user._id}`,
-            JSON.stringify(Array.from(updatedSet)),
+        if (isReply && parentId) {
+          // Remove reply from replies state
+          setRepliesByComment((prev) => ({
+            ...prev,
+            [parentId]: (prev[parentId] || []).filter((r) => r._id !== commentId),
+          }));
+          // Decrement replyCount on the parent root comment
+          setComments((prev) =>
+            prev.map((c) =>
+              c._id === parentId
+                ? { ...c, replyCount: Math.max(0, (c.replyCount || 0) - 1) }
+                : c,
+            ),
           );
+        } else {
+          // Remove root comment from list
+          setComments((prev) => prev.filter((c) => c._id !== commentId));
+          // Clean up any cached replies
+          setRepliesByComment((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+          });
         }
       } else {
         console.error("Delete failed, server responded:", response);
@@ -406,40 +284,8 @@ export default function WatchPage() {
     }
   };
 
-  // Opens the reply box under a comment, pre-filled with @username
-  const handleReplyClick = (comment) => {
-    if (!user) return alert("Please sign in to reply");
-    const mention = `@${comment.owner?.userName || "user"} `;
+  // ─── Edit ─────────────────────────────────────────────────────
 
-    if (replyingTo === comment._id) {
-      setReplyingTo(null);
-      setReplyText("");
-      return;
-    }
-
-    setReplyingTo(comment._id);
-    setReplyText(mention);
-    setTimeout(() => replyInputRef.current?.focus(), 0);
-  };
-
-  const handleReplySubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return alert("Please sign in to reply");
-    if (!replyText.trim()) return;
-
-    try {
-      const response = await api.comments.add(videoId, replyText);
-      if (response.success && response.data) {
-        setComments((prev) => [response.data, ...prev]);
-        setReplyText("");
-        setReplyingTo(null);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Opens/closes the inline edit box for a comment, pre-filled with its content
   const handleEditClick = (comment) => {
     if (editingId === comment._id) {
       setEditingId(null);
@@ -450,15 +296,28 @@ export default function WatchPage() {
     setEditText(comment.content);
   };
 
-  const handleEditSave = async (commentId) => {
+  const handleEditSave = async (commentId, isReply = false, parentId = null) => {
     if (!editText.trim()) return;
     setSavingEdit(true);
     try {
       const response = await api.comments.update(commentId, editText.trim());
       if (response.success && response.data) {
-        setComments((prev) =>
-          prev.map((c) => (c._id === commentId ? response.data : c)),
-        );
+        if (isReply && parentId) {
+          // Update reply in replies state
+          setRepliesByComment((prev) => ({
+            ...prev,
+            [parentId]: (prev[parentId] || []).map((r) =>
+              r._id === commentId ? { ...r, content: editText.trim() } : r,
+            ),
+          }));
+        } else {
+          // Update root comment
+          setComments((prev) =>
+            prev.map((c) =>
+              c._id === commentId ? { ...c, content: editText.trim() } : c,
+            ),
+          );
+        }
         setEditingId(null);
         setEditText("");
       } else {
@@ -472,73 +331,161 @@ export default function WatchPage() {
     }
   };
 
-  // Toggles like on a single comment, with optimistic update + rollback
-  const handleCommentLikeToggle = async (commentId) => {
+  // ─── Reply System ─────────────────────────────────────────────
+
+  const handleReplyClick = (comment) => {
+    if (!user) return alert("Please sign in to reply");
+
+    if (replyingTo === comment._id) {
+      setReplyingTo(null);
+      setReplyText("");
+      return;
+    }
+
+    setReplyingTo(comment._id);
+    setReplyText("");
+    setTimeout(() => replyInputRef.current?.focus(), 0);
+  };
+
+  const handleReplySubmit = async (e, parentCommentId) => {
+    e.preventDefault();
+    if (!user) return alert("Please sign in to reply");
+    if (!replyText.trim()) return;
+
+    try {
+      const response = await api.comments.addReply(parentCommentId, replyText.trim());
+      if (response.success && response.data) {
+        // Append new reply to the cached replies for this parent
+        setRepliesByComment((prev) => ({
+          ...prev,
+          [parentCommentId]: [...(prev[parentCommentId] || []), response.data],
+        }));
+
+        // Increment the replyCount on the root comment
+        setComments((prev) =>
+          prev.map((c) =>
+            c._id === parentCommentId
+              ? { ...c, replyCount: (c.replyCount || 0) + 1 }
+              : c,
+          ),
+        );
+
+        // Auto-expand the thread so the user sees their reply
+        setExpandedThreads((prev) => ({ ...prev, [parentCommentId]: true }));
+
+        setReplyText("");
+        setReplyingTo(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fetch replies from DB on-demand when expanding a thread
+  const fetchReplies = async (commentId) => {
+    if (loadingReplies[commentId]) return;
+    setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
+
+    try {
+      const response = await api.comments.getReplies(commentId);
+      if (response.success && response.data) {
+        setRepliesByComment((prev) => ({
+          ...prev,
+          [commentId]: response.data,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch replies:", err);
+    } finally {
+      setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
+    }
+  };
+
+  const toggleThreadReplies = async (commentId) => {
+    const isCurrentlyExpanded = expandedThreads[commentId];
+
+    if (!isCurrentlyExpanded) {
+      // Expanding — fetch replies from DB
+      await fetchReplies(commentId);
+    }
+
+    setExpandedThreads((prev) => ({
+      ...prev,
+      [commentId]: !prev[commentId],
+    }));
+  };
+
+  // ─── Like Toggle (uses real DB response) ──────────────────────
+
+  const handleCommentLikeToggle = async (commentId, isReply = false, parentId = null) => {
     if (!user) return alert("Please sign in to like comments");
     if (likingCommentRef.current.has(commentId)) return;
     likingCommentRef.current.add(commentId);
 
-    const prevComments = comments;
-    const prevLocalSet = new Set(localLikedComments);
-
-    const commentObj = comments.find((c) => c._id === commentId);
-    if (!commentObj) {
-      likingCommentRef.current.delete(commentId);
-      return;
-    }
-
-    const currentLiked = getCommentIsLiked(commentObj);
-    const nextLiked = !currentLiked;
-
-    // 1. Update the comments list with next numeric count optimistically
-    setComments((prev) =>
-      prev.map((c) => {
+    // Optimistic update
+    const updateLikeState = (items) =>
+      items.map((c) => {
         if (c._id !== commentId) return c;
-
-        const currentCount = getCommentLikesCount(c);
-        const nextCount = Math.max(0, currentCount + (nextLiked ? 1 : -1));
-
+        const nextLiked = !c.isLiked;
         return {
           ...c,
           isLiked: nextLiked,
-          likesCount: nextCount,
+          likesCount: Math.max(0, (c.likesCount || 0) + (nextLiked ? 1 : -1)),
         };
-      }),
-    );
+      });
 
-    // 2. Update persistent local storage set optimistically
-    const nextSet = new Set(localLikedComments);
-    if (nextLiked) {
-      nextSet.add(commentId);
+    if (isReply && parentId) {
+      setRepliesByComment((prev) => ({
+        ...prev,
+        [parentId]: updateLikeState(prev[parentId] || []),
+      }));
     } else {
-      nextSet.delete(commentId);
+      setComments((prev) => updateLikeState(prev));
     }
-    setLocalLikedComments(nextSet);
-    localStorage.setItem(
-      `likedComments_${user._id}`,
-      JSON.stringify(Array.from(nextSet)),
-    );
 
     try {
       const response = await api.likes.toggleComment(commentId);
-      if (!response.success) {
-        // Rollback state on backend logical error
-        setComments(prevComments);
-        setLocalLikedComments(prevLocalSet);
-        localStorage.setItem(
-          `likedComments_${user._id}`,
-          JSON.stringify(Array.from(prevLocalSet)),
-        );
+      if (response.success && response.data) {
+        // Use the REAL data from DB to correct any optimistic mismatch
+        const { isLiked: dbLiked, likesCount: dbCount } = response.data;
+
+        const applyDbState = (items) =>
+          items.map((c) => {
+            if (c._id !== commentId) return c;
+            return { ...c, isLiked: dbLiked, likesCount: dbCount };
+          });
+
+        if (isReply && parentId) {
+          setRepliesByComment((prev) => ({
+            ...prev,
+            [parentId]: applyDbState(prev[parentId] || []),
+          }));
+        } else {
+          setComments((prev) => applyDbState(prev));
+        }
       }
     } catch (err) {
       console.error(err);
-      // Rollback state on network/API crash
-      setComments(prevComments);
-      setLocalLikedComments(prevLocalSet);
-      localStorage.setItem(
-        `likedComments_${user._id}`,
-        JSON.stringify(Array.from(prevLocalSet)),
-      );
+      // Rollback on error — reverse the optimistic change
+      const rollback = (items) =>
+        items.map((c) => {
+          if (c._id !== commentId) return c;
+          const prevLiked = !c.isLiked;
+          return {
+            ...c,
+            isLiked: prevLiked,
+            likesCount: Math.max(0, (c.likesCount || 0) + (prevLiked ? 1 : -1)),
+          };
+        });
+
+      if (isReply && parentId) {
+        setRepliesByComment((prev) => ({
+          ...prev,
+          [parentId]: rollback(prev[parentId] || []),
+        }));
+      } else {
+        setComments((prev) => rollback(prev));
+      }
     } finally {
       likingCommentRef.current.delete(commentId);
     }
@@ -554,18 +501,9 @@ export default function WatchPage() {
     );
   };
 
-  const toggleThreadReplies = (commentId) => {
-    setExpandedThreads((prev) => ({
-      ...prev,
-      [commentId]: !prev[commentId],
-    }));
-  };
+  // ─── Render a single comment/reply row ────────────────────────
 
-  // Renders a single row item with clearly structured, persistent buttons
-  const renderCommentRow = (comment, isReply = false) => {
-    const isLikedState = getCommentIsLiked(comment);
-    const commentLikesCount = getCommentLikesCount(comment);
-
+  const renderCommentRow = (comment, isReply = false, parentId = null) => {
     return (
       <div key={comment._id} className="flex gap-4 items-start group">
         <Link href={`/channel/${comment.owner?.userName}`}>
@@ -593,11 +531,11 @@ export default function WatchPage() {
                 {comment.owner?.fullName}
               </Link>
               <span className="text-[10px] text-zinc-500">
-                {new Date(comment.createdAt).toLocaleDateString()}
+                {formatRelativeTime(comment.createdAt)}
               </span>
             </div>
 
-            {/* Structured action buttons instead of hidden hover classes */}
+            {/* Owner action buttons */}
             {isOwnComment(comment) && (
               <div className="flex items-center gap-1.5">
                 <button
@@ -608,7 +546,9 @@ export default function WatchPage() {
                   <Pencil size={11} />
                 </button>
                 <button
-                  onClick={() => handleCommentDelete(comment._id)}
+                  onClick={() =>
+                    handleCommentDelete(comment._id, isReply, parentId)
+                  }
                   disabled={deletingId === comment._id}
                   className="text-zinc-400 hover:text-red-400 p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-red-500/30 transition-all duration-200 disabled:opacity-40"
                   title="Delete Comment"
@@ -630,7 +570,9 @@ export default function WatchPage() {
               />
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleEditSave(comment._id)}
+                  onClick={() =>
+                    handleEditSave(comment._id, isReply, parentId)
+                  }
                   disabled={savingEdit || !editText.trim()}
                   className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 disabled:opacity-40"
                 >
@@ -653,51 +595,49 @@ export default function WatchPage() {
                 isReply ? "text-xs" : "text-sm"
               }`}
             >
-              {comment.content.match(MENTION_REGEX) ? (
-                <>
-                  <span className="text-indigo-400 font-medium">
-                    {comment.content.match(MENTION_REGEX)[0].trim()}
-                  </span>{" "}
-                  {comment.content.replace(MENTION_REGEX, "")}
-                </>
-              ) : (
-                comment.content
-              )}
+              {comment.content}
             </p>
           )}
 
-          {/* Action Row */}
+          {/* Action Row: Like + Reply */}
           <div className="flex items-center gap-4 mt-1">
             <button
-              onClick={() => handleCommentLikeToggle(comment._id)}
-              aria-label={isLikedState ? "Unlike comment" : "Like comment"}
+              onClick={() =>
+                handleCommentLikeToggle(comment._id, isReply, parentId)
+              }
+              aria-label={comment.isLiked ? "Unlike comment" : "Like comment"}
               className={`flex items-center gap-1.5 text-xs transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50 ${
-                isLikedState
+                comment.isLiked
                   ? "text-indigo-400 font-semibold"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               <ThumbsUp
                 size={12}
-                fill={isLikedState ? "currentColor" : "none"}
+                fill={comment.isLiked ? "currentColor" : "none"}
                 className="transition-transform active:scale-125 duration-200"
               />
-              <span>{commentLikesCount}</span>
+              <span>{comment.likesCount || 0}</span>
             </button>
 
-            <button
-              onClick={() => handleReplyClick(comment)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-indigo-400 transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50"
-            >
-              <Reply size={12} />
-              <span>{replyingTo === comment._id ? "Cancel" : "Reply"}</span>
-            </button>
+            {/* Reply button — only on root comments, or allow reply on replies too */}
+            {!isReply && (
+              <button
+                onClick={() => handleReplyClick(comment)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-indigo-400 transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50"
+              >
+                <Reply size={12} />
+                <span>
+                  {replyingTo === comment._id ? "Cancel" : "Reply"}
+                </span>
+              </button>
+            )}
           </div>
 
-          {/* Inline Reply Input Form */}
-          {replyingTo === comment._id && (
+          {/* Inline Reply Input Form — only for root comments */}
+          {!isReply && replyingTo === comment._id && (
             <form
-              onSubmit={handleReplySubmit}
+              onSubmit={(e) => handleReplySubmit(e, comment._id)}
               className="flex gap-2 mt-3 animate-fade-in"
             >
               <img
@@ -714,7 +654,7 @@ export default function WatchPage() {
                   type="text"
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Write a reply..."
+                  placeholder={`Reply to ${comment.owner?.fullName || "user"}...`}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
                 />
                 <button
@@ -741,6 +681,8 @@ export default function WatchPage() {
       </div>
     );
   };
+
+  // ─── Loading State ────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -950,45 +892,55 @@ export default function WatchPage() {
             </div>
           </form>
 
-          {/* Comments List */}
+          {/* Comments List — Root comments with nested replies */}
           <div className="flex flex-col gap-6">
-            {rootComments.map((rootComment) => {
-              const threadReplies = repliesByParentId[rootComment._id] || [];
+            {comments.map((rootComment) => {
+              const threadReplies = repliesByComment[rootComment._id] || [];
               const isExpanded = expandedThreads[rootComment._id];
+              const replyCount = rootComment.replyCount || 0;
+              const isLoadingThread = loadingReplies[rootComment._id];
 
               return (
                 <div
                   key={rootComment._id}
                   className="flex flex-col gap-2 border-b border-zinc-900/30 pb-4"
                 >
-                  {/* Root Comment Row */}
-                  {renderCommentRow(rootComment, false)}
+                  {/* Root Comment */}
+                  {renderCommentRow(rootComment, false, null)}
 
-                  {/* Reply Toggle Actions — YouTube style */}
-                  {threadReplies.length > 0 && (
+                  {/* Reply Toggle — YouTube style */}
+                  {replyCount > 0 && (
                     <div className="pl-14">
                       <button
                         onClick={() => toggleThreadReplies(rootComment._id)}
-                        className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 mt-1"
+                        disabled={isLoadingThread}
+                        className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5 mt-1 disabled:opacity-50"
                       >
-                        {isExpanded ? (
+                        {isLoadingThread ? (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></span>
+                            Loading...
+                          </span>
+                        ) : isExpanded ? (
                           <>
-                            <span>Hide {threadReplies.length} replies</span>
+                            <ChevronUp size={14} />
+                            <span>Hide {replyCount} {replyCount === 1 ? "reply" : "replies"}</span>
                           </>
                         ) : (
                           <>
-                            <span>View {threadReplies.length} replies</span>
+                            <ChevronDown size={14} />
+                            <span>View {replyCount} {replyCount === 1 ? "reply" : "replies"}</span>
                           </>
                         )}
                       </button>
                     </div>
                   )}
 
-                  {/* One-Level Nesting for Replies */}
+                  {/* Nested Replies */}
                   {isExpanded && threadReplies.length > 0 && (
                     <div className="pl-12 border-l border-zinc-800/50 ml-5 mt-2 flex flex-col gap-4">
                       {threadReplies.map((reply) =>
-                        renderCommentRow(reply, true),
+                        renderCommentRow(reply, true, rootComment._id),
                       )}
                     </div>
                   )}
