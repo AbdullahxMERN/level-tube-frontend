@@ -418,67 +418,46 @@ export default function WatchPage() {
     if (likingCommentRef.current.has(commentId)) return;
     likingCommentRef.current.add(commentId);
 
-    const updateLikeState = (items) =>
-      items.map((c) => {
-        if (c._id !== commentId) return c;
-        const nextLiked = !c.isLiked;
-        return {
-          ...c,
-          isLiked: nextLiked,
-          likesCount: Math.max(0, (c.likesCount || 0) + (nextLiked ? 1 : -1)),
-        };
-      });
+    const targetList = isReply && parentId ? (repliesByComment[parentId] || []) : comments;
+    const targetComment = targetList.find((c) => c._id === commentId);
+    const targetLiked = targetComment ? !targetComment.isLiked : true;
 
+    const applyLike = (items, nextLiked, nextCount) =>
+      items.map((c) =>
+        c._id === commentId
+          ? {
+              ...c,
+              isLiked: nextLiked,
+              likesCount: nextCount !== undefined ? nextCount : Math.max(0, (c.likesCount || 0) + (nextLiked ? 1 : -1)),
+            }
+          : c,
+      );
+
+    // Immediate UI update
     if (isReply && parentId) {
       setRepliesByComment((prev) => ({
         ...prev,
-        [parentId]: updateLikeState(prev[parentId] || []),
+        [parentId]: applyLike(prev[parentId] || [], targetLiked),
       }));
     } else {
-      setComments((prev) => updateLikeState(prev));
+      setComments((prev) => applyLike(prev, targetLiked));
     }
 
     try {
       const response = await api.likes.toggleComment(commentId);
       if (response.success && response.data) {
         const { isLiked: dbLiked, likesCount: dbCount } = response.data;
-
-        const applyDbState = (items) =>
-          items.map((c) => {
-            if (c._id !== commentId) return c;
-            return { ...c, isLiked: dbLiked, likesCount: dbCount };
-          });
-
         if (isReply && parentId) {
           setRepliesByComment((prev) => ({
             ...prev,
-            [parentId]: applyDbState(prev[parentId] || []),
+            [parentId]: applyLike(prev[parentId] || [], dbLiked, dbCount),
           }));
         } else {
-          setComments((prev) => applyDbState(prev));
+          setComments((prev) => applyLike(prev, dbLiked, dbCount));
         }
       }
     } catch (err) {
-      console.error(err);
-      const rollback = (items) =>
-        items.map((c) => {
-          if (c._id !== commentId) return c;
-          const prevLiked = !c.isLiked;
-          return {
-            ...c,
-            isLiked: prevLiked,
-            likesCount: Math.max(0, (c.likesCount || 0) + (prevLiked ? 1 : -1)),
-          };
-        });
-
-      if (isReply && parentId) {
-        setRepliesByComment((prev) => ({
-          ...prev,
-          [parentId]: rollback(prev[parentId] || []),
-        }));
-      } else {
-        setComments((prev) => rollback(prev));
-      }
+      console.error("Failed to toggle comment like:", err);
     } finally {
       likingCommentRef.current.delete(commentId);
     }
