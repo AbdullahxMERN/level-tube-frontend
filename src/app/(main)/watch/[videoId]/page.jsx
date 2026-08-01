@@ -17,6 +17,8 @@ import {
   Pencil,
   ChevronDown,
   ChevronUp,
+  MessageSquare,
+  LogIn,
 } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
 
@@ -50,6 +52,9 @@ export default function WatchPage() {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Sign in prompt banner state for guest user actions
+  const [signInPrompt, setSignInPrompt] = useState(null);
 
   // Like guard — prevents double-fire
   const likingCommentRef = useRef(new Set());
@@ -141,7 +146,7 @@ export default function WatchPage() {
           }
         }
 
-        // Comments now come with likesCount, isLiked, replyCount from the DB
+        // Guests can fetch comments with likesCount, isLiked (false for guest), replyCount from DB
         const commentsRes = await api.comments.getByVideo(videoId);
         if (commentsRes.success && commentsRes.data) {
           setComments(commentsRes.data);
@@ -163,8 +168,12 @@ export default function WatchPage() {
     loadData();
   }, [videoId, user?._id]);
 
+  const promptGuestSignIn = (actionName) => {
+    setSignInPrompt(`Please sign in to ${actionName}.`);
+  };
+
   const handleLikeToggle = async () => {
-    if (!user) return alert("Please sign in to like videos");
+    if (!user) return promptGuestSignIn("like this video");
     if (likingVideoRef.current) return;
     likingVideoRef.current = true;
 
@@ -185,7 +194,7 @@ export default function WatchPage() {
   };
 
   const handleSubscribeToggle = async () => {
-    if (!user) return alert("Please sign in to subscribe");
+    if (!user) return promptGuestSignIn("subscribe to channels");
     if (!video?.owner?._id) return;
 
     const nextSubscribed = !isSubscribed;
@@ -228,13 +237,12 @@ export default function WatchPage() {
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!user) return alert("Please sign in to comment");
+    if (!user) return promptGuestSignIn("post a comment");
     if (!newComment.trim()) return;
 
     try {
       const response = await api.comments.add(videoId, newComment);
       if (response.success && response.data) {
-        // New root comment — prepend to list
         setComments((prev) => [response.data, ...prev]);
         setNewComment("");
       }
@@ -249,12 +257,10 @@ export default function WatchPage() {
       const response = await api.comments.delete(commentId);
       if (response.success) {
         if (isReply && parentId) {
-          // Remove reply from replies state
           setRepliesByComment((prev) => ({
             ...prev,
             [parentId]: (prev[parentId] || []).filter((r) => r._id !== commentId),
           }));
-          // Decrement replyCount on the parent root comment
           setComments((prev) =>
             prev.map((c) =>
               c._id === parentId
@@ -263,9 +269,7 @@ export default function WatchPage() {
             ),
           );
         } else {
-          // Remove root comment from list
           setComments((prev) => prev.filter((c) => c._id !== commentId));
-          // Clean up any cached replies
           setRepliesByComment((prev) => {
             const next = { ...prev };
             delete next[commentId];
@@ -273,7 +277,6 @@ export default function WatchPage() {
           });
         }
       } else {
-        console.error("Delete failed, server responded:", response);
         alert(response.message || "Failed to delete comment");
       }
     } catch (err) {
@@ -303,7 +306,6 @@ export default function WatchPage() {
       const response = await api.comments.update(commentId, editText.trim());
       if (response.success && response.data) {
         if (isReply && parentId) {
-          // Update reply in replies state
           setRepliesByComment((prev) => ({
             ...prev,
             [parentId]: (prev[parentId] || []).map((r) =>
@@ -311,7 +313,6 @@ export default function WatchPage() {
             ),
           }));
         } else {
-          // Update root comment
           setComments((prev) =>
             prev.map((c) =>
               c._id === commentId ? { ...c, content: editText.trim() } : c,
@@ -334,7 +335,7 @@ export default function WatchPage() {
   // ─── Reply System ─────────────────────────────────────────────
 
   const handleReplyClick = (comment) => {
-    if (!user) return alert("Please sign in to reply");
+    if (!user) return promptGuestSignIn("reply to comments");
 
     if (replyingTo === comment._id) {
       setReplyingTo(null);
@@ -349,19 +350,17 @@ export default function WatchPage() {
 
   const handleReplySubmit = async (e, parentCommentId) => {
     e.preventDefault();
-    if (!user) return alert("Please sign in to reply");
+    if (!user) return promptGuestSignIn("reply to comments");
     if (!replyText.trim()) return;
 
     try {
       const response = await api.comments.addReply(parentCommentId, replyText.trim());
       if (response.success && response.data) {
-        // Append new reply to the cached replies for this parent
         setRepliesByComment((prev) => ({
           ...prev,
           [parentCommentId]: [...(prev[parentCommentId] || []), response.data],
         }));
 
-        // Increment the replyCount on the root comment
         setComments((prev) =>
           prev.map((c) =>
             c._id === parentCommentId
@@ -370,9 +369,7 @@ export default function WatchPage() {
           ),
         );
 
-        // Auto-expand the thread so the user sees their reply
         setExpandedThreads((prev) => ({ ...prev, [parentCommentId]: true }));
-
         setReplyText("");
         setReplyingTo(null);
       }
@@ -381,7 +378,7 @@ export default function WatchPage() {
     }
   };
 
-  // Fetch replies from DB on-demand when expanding a thread
+  // Guests can fetch and view replies on-demand
   const fetchReplies = async (commentId) => {
     if (loadingReplies[commentId]) return;
     setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
@@ -405,7 +402,6 @@ export default function WatchPage() {
     const isCurrentlyExpanded = expandedThreads[commentId];
 
     if (!isCurrentlyExpanded) {
-      // Expanding — fetch replies from DB
       await fetchReplies(commentId);
     }
 
@@ -415,14 +411,13 @@ export default function WatchPage() {
     }));
   };
 
-  // ─── Like Toggle (uses real DB response) ──────────────────────
+  // ─── Like Toggle ──────────────────────────────────────────────
 
   const handleCommentLikeToggle = async (commentId, isReply = false, parentId = null) => {
-    if (!user) return alert("Please sign in to like comments");
+    if (!user) return promptGuestSignIn("like comments");
     if (likingCommentRef.current.has(commentId)) return;
     likingCommentRef.current.add(commentId);
 
-    // Optimistic update
     const updateLikeState = (items) =>
       items.map((c) => {
         if (c._id !== commentId) return c;
@@ -446,7 +441,6 @@ export default function WatchPage() {
     try {
       const response = await api.likes.toggleComment(commentId);
       if (response.success && response.data) {
-        // Use the REAL data from DB to correct any optimistic mismatch
         const { isLiked: dbLiked, likesCount: dbCount } = response.data;
 
         const applyDbState = (items) =>
@@ -466,7 +460,6 @@ export default function WatchPage() {
       }
     } catch (err) {
       console.error(err);
-      // Rollback on error — reverse the optimistic change
       const rollback = (items) =>
         items.map((c) => {
           if (c._id !== commentId) return c;
@@ -620,7 +613,6 @@ export default function WatchPage() {
               <span>{comment.likesCount || 0}</span>
             </button>
 
-            {/* Reply button — only on root comments, or allow reply on replies too */}
             {!isReply && (
               <button
                 onClick={() => handleReplyClick(comment)}
@@ -732,7 +724,32 @@ export default function WatchPage() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-16">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-16 relative">
+      {/* Sign-in prompt banner for guest user actions */}
+      {signInPrompt && (
+        <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 border border-indigo-500/40 p-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-fade-in max-w-sm">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
+            <LogIn size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-200 font-semibold">{signInPrompt}</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Join LevelTube to interact with creators.</p>
+          </div>
+          <Link
+            href="/login"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex-shrink-0"
+          >
+            Sign In
+          </Link>
+          <button
+            onClick={() => setSignInPrompt(null)}
+            className="text-zinc-500 hover:text-zinc-300"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Video Content */}
       <div className="lg:col-span-2 flex flex-col gap-6">
         {/* Player */}
@@ -864,35 +881,50 @@ export default function WatchPage() {
             {comments.length} Comments
           </h3>
 
-          {/* Post Comment */}
-          <form onSubmit={handleCommentSubmit} className="flex gap-4">
-            <img
-              src={
-                user?.avatar ||
-                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
-              }
-              alt={user?.fullName || "Guest"}
-              className="w-10 h-10 rounded-full object-cover border border-zinc-800"
-            />
-            <div className="flex-1 flex gap-2">
-              <input
-                type="text"
-                placeholder="Add a public comment..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-2 px-4 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+          {/* Comment Box (Logged-in user vs Guest user) */}
+          {user ? (
+            <form onSubmit={handleCommentSubmit} className="flex gap-4">
+              <img
+                src={
+                  user?.avatar ||
+                  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"
+                }
+                alt={user?.fullName || "User"}
+                className="w-10 h-10 rounded-full object-cover border border-zinc-800"
               />
-              <button
-                type="submit"
-                disabled={!newComment.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-2xl disabled:opacity-40 transition-all duration-200 shadow-md shadow-indigo-600/10 flex items-center justify-center flex-shrink-0"
+              <div className="flex-1 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Add a public comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-2 px-4 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+                />
+                <button
+                  type="submit"
+                  disabled={!newComment.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-2xl disabled:opacity-40 transition-all duration-200 shadow-md shadow-indigo-600/10 flex items-center justify-center flex-shrink-0"
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-sm">
+              <div className="flex items-center gap-3 text-zinc-400">
+                <MessageSquare size={18} className="text-indigo-400" />
+                <span className="text-xs md:text-sm">Sign in to leave a comment, like, or reply</span>
+              </div>
+              <Link
+                href="/login"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex-shrink-0"
               >
-                <Send size={16} />
-              </button>
+                Sign In
+              </Link>
             </div>
-          </form>
+          )}
 
-          {/* Comments List — Root comments with nested replies */}
+          {/* Comments List — Guest users can view all comments & replies */}
           <div className="flex flex-col gap-6">
             {comments.map((rootComment) => {
               const threadReplies = repliesByComment[rootComment._id] || [];
@@ -908,7 +940,7 @@ export default function WatchPage() {
                   {/* Root Comment */}
                   {renderCommentRow(rootComment, false, null)}
 
-                  {/* Reply Toggle — YouTube style */}
+                  {/* Reply Toggle — YouTube / TikTok style */}
                   {replyCount > 0 && (
                     <div className="pl-14">
                       <button
@@ -936,7 +968,7 @@ export default function WatchPage() {
                     </div>
                   )}
 
-                  {/* Nested Replies */}
+                  {/* Nested Replies — Guest users can view all nested replies */}
                   {isExpanded && threadReplies.length > 0 && (
                     <div className="pl-12 border-l border-zinc-800/50 ml-5 mt-2 flex flex-col gap-4">
                       {threadReplies.map((reply) =>
