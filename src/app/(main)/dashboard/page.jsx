@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
+import Logo from "@/components/Logo";
 import {
   BarChart3,
   Users,
@@ -17,17 +18,12 @@ import {
   ToggleRight,
   Eye,
   Calendar,
-  Plus,
   Search,
-  Sparkles,
   Play,
   TrendingUp,
   FileVideo,
   Image as ImageIcon,
-  CheckCircle2,
   ExternalLink,
-  ShieldCheck,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -230,17 +226,17 @@ export default function DashboardPage() {
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-5 shadow-xl shadow-indigo-500/5">
-          <BarChart3 size={32} />
+      <div className="flex flex-col items-center justify-center py-28 text-center max-w-md mx-auto px-4">
+        <div className="p-4 rounded-3xl bg-zinc-900 border border-zinc-800 shadow-2xl mb-6">
+          <Logo />
         </div>
         <h3 className="text-2xl font-extrabold text-zinc-100 tracking-tight">LevelTube Studio</h3>
         <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
-          Sign in to access your creator dashboard, upload content, and manage video analytics.
+          Sign in to access your creator dashboard, upload content, and monitor channel growth.
         </p>
         <Link
           href="/login"
-          className="mt-6 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-sm px-8 py-3 rounded-full shadow-lg shadow-indigo-600/20 transition-all duration-300"
+          className="mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm px-8 py-3 rounded-full shadow-xl shadow-indigo-600/25 border border-indigo-400/30 transition-all duration-300"
         >
           Sign In to Creator Studio
         </Link>
@@ -249,26 +245,28 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 pb-20 max-w-7xl mx-auto">
-      {/* Top Banner Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-indigo-950/40 border border-zinc-800/80 p-6 md:p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="flex flex-col gap-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 pt-2">
+      {/* ── Top Header Banner (Apple/Microsoft Style) ────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl glass-panel bg-zinc-950/80 border border-zinc-800/80 p-6 md:p-8 shadow-2xl">
+        <div className="absolute top-0 right-0 -mt-12 -mr-12 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white flex-shrink-0">
-              <Zap size={28} />
+          <div className="flex items-center gap-5">
+            {/* Real LevelTube Logo (Replaces purple zap icon) */}
+            <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl flex items-center justify-center flex-shrink-0">
+              <Logo />
             </div>
+
             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl md:text-3xl font-extrabold text-zinc-100 tracking-tight">
                   Studio Dashboard
                 </h1>
-                <span className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Pro Studio
+                <span className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+                  Pro Creator Studio
                 </span>
               </div>
               <p className="text-xs md:text-sm text-zinc-400 mt-1">
-                Welcome back, <span className="text-zinc-200 font-semibold">{user.fullName || user.userName}</span>. Manage your channel content and monitor real-time growth.
+                Welcome back, <span className="text-zinc-200 font-semibold">{user.fullName || user.userName}</span>. Monitor channel performance and manage content.
               </p>
             </div>
           </div>
@@ -288,14 +286,14 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-32 rounded-3xl bg-zinc-900/60 border border-zinc-800/50 animate-pulse"></div>
+              <div key={i} className="h-32 rounded-3xl bg-zinc-900/60 border border-zinc-800/50 animate-pulse" />
             ))}
           </div>
-          <div className="h-96 rounded-3xl bg-zinc-900/60 border border-zinc-800/50 animate-pulse"></div>
+          <div className="h-96 rounded-3xl bg-zinc-900/60 border border-zinc-800/50 animate-pulse" />
         </div>
       ) : (
         <>
-          {/* Analytics Overview Grid */}
+          {/* ── Analytics Overview Cards (Apple/Microsoft Style) ────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
@@ -303,8 +301,6 @@ export default function DashboardPage() {
                 value: stats?.totalVideos || videos.length || 0,
                 unit: "Videos",
                 icon: Film,
-                gradient: "from-indigo-500/20 to-indigo-600/5",
-                iconBg: "bg-indigo-500/15 text-indigo-400 border-indigo-500/20",
                 badge: "Active Library",
               },
               {
@@ -312,8 +308,6 @@ export default function DashboardPage() {
                 value: (stats?.totalViews || 0).toLocaleString(),
                 unit: "Views",
                 icon: Eye,
-                gradient: "from-violet-500/20 to-purple-600/5",
-                iconBg: "bg-violet-500/15 text-violet-400 border-violet-500/20",
                 badge: "All-Time Views",
               },
               {
@@ -321,8 +315,6 @@ export default function DashboardPage() {
                 value: (stats?.totalSubscribers || 0).toLocaleString(),
                 unit: "Subscribers",
                 icon: Users,
-                gradient: "from-blue-500/20 to-cyan-600/5",
-                iconBg: "bg-blue-500/15 text-blue-400 border-blue-500/20",
                 badge: "Channel Audience",
               },
               {
@@ -330,8 +322,6 @@ export default function DashboardPage() {
                 value: (stats?.totalLikes || 0).toLocaleString(),
                 unit: "Reactions",
                 icon: ThumbsUp,
-                gradient: "from-pink-500/20 to-rose-600/5",
-                iconBg: "bg-pink-500/15 text-pink-400 border-pink-500/20",
                 badge: "Community Love",
               },
             ].map((metric, i) => {
@@ -339,28 +329,28 @@ export default function DashboardPage() {
               return (
                 <div
                   key={i}
-                  className={`relative overflow-hidden bg-gradient-to-b ${metric.gradient} bg-zinc-900/60 border border-zinc-800/80 p-5 rounded-3xl flex flex-col justify-between gap-4 shadow-lg backdrop-blur-md hover:border-zinc-700/80 transition-all duration-300`}
+                  className="relative overflow-hidden bg-zinc-900/40 hover:bg-zinc-900/60 border border-zinc-800/80 hover:border-indigo-500/30 p-6 rounded-3xl flex flex-col justify-between gap-4 shadow-xl backdrop-blur-md transition-all duration-300 group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-400">
+                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
                       {metric.title}
                     </span>
-                    <div className={`p-2.5 rounded-2xl border ${metric.iconBg}`}>
+                    <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500/20 transition-colors">
                       <Icon size={18} />
                     </div>
                   </div>
 
                   <div className="flex items-baseline justify-between mt-1">
-                    <span className="text-3xl font-extrabold text-zinc-100 tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-extrabold text-zinc-100 tracking-tight">
                       {metric.value}
                     </span>
-                    <span className="text-[11px] font-medium text-zinc-500">
+                    <span className="text-xs font-semibold text-zinc-500">
                       {metric.unit}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-indigo-400 pt-2 border-t border-zinc-800/50">
-                    <TrendingUp size={12} />
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400 pt-3 border-t border-zinc-800/80">
+                    <TrendingUp size={13} />
                     <span>{metric.badge}</span>
                   </div>
                 </div>
@@ -368,16 +358,16 @@ export default function DashboardPage() {
             })}
           </div>
 
-          {/* Videos Inventory Section */}
+          {/* ── Video Inventory Table (Advanced Pro Studio Style) ───── */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md flex flex-col">
-            {/* Table Control Header */}
-            <div className="p-5 border-b border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/20">
+            {/* Control Header */}
+            <div className="p-6 border-b border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-950/40">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                  <Film size={18} />
+                <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Film size={20} />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-base text-zinc-100">
+                  <h3 className="font-extrabold text-lg text-zinc-100 tracking-tight">
                     Video Inventory
                   </h3>
                   <p className="text-xs text-zinc-400">
@@ -388,15 +378,14 @@ export default function DashboardPage() {
 
               {/* Search & Filters */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Search Bar */}
                 <div className="relative flex-1 sm:w-64">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
                   <input
                     type="text"
                     placeholder="Search videos..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl py-2 pl-9 pr-8 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-all"
                   />
                   {searchQuery && (
                     <button
@@ -408,22 +397,20 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Status Filter */}
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-zinc-950/80 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2 px-3 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="all">All Status</option>
                   <option value="public">Public</option>
                   <option value="private">Private</option>
                 </select>
 
-                {/* Sort dropdown */}
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-zinc-950/80 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2 px-3 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="newest">Newest First</option>
                   <option value="views">Most Views</option>
@@ -437,12 +424,12 @@ export default function DashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-zinc-800/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-950/40">
-                      <th className="py-3.5 px-5">Video Title</th>
-                      <th className="py-3.5 px-4">Visibility</th>
-                      <th className="py-3.5 px-4">Uploaded</th>
-                      <th className="py-3.5 px-4">Views</th>
-                      <th className="py-3.5 px-5 text-right">Manage</th>
+                    <tr className="border-b border-zinc-800/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-950/60">
+                      <th className="py-4 px-6">Video Title</th>
+                      <th className="py-4 px-4">Visibility</th>
+                      <th className="py-4 px-4">Uploaded</th>
+                      <th className="py-4 px-4">Views</th>
+                      <th className="py-4 px-6 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/40 text-sm">
@@ -452,11 +439,11 @@ export default function DashboardPage() {
                         className="hover:bg-indigo-500/[0.03] transition-colors group"
                       >
                         {/* Video Thumbnail & Details */}
-                        <td className="py-4 px-5 max-w-sm">
-                          <div className="flex gap-3.5 items-center">
+                        <td className="py-4 px-6 max-w-md">
+                          <div className="flex gap-4 items-center">
                             <Link
                               href={`/watch/${vid._id}`}
-                              className="relative w-24 aspect-video bg-zinc-800 rounded-xl overflow-hidden flex-shrink-0 block group/thumb border border-zinc-800"
+                              className="relative w-28 aspect-video bg-zinc-800 rounded-2xl overflow-hidden flex-shrink-0 block group/thumb border border-zinc-800"
                             >
                               <img
                                 src={vid.thumbnail}
@@ -464,18 +451,18 @@ export default function DashboardPage() {
                                 className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
-                                <Play size={16} className="text-white fill-white" />
+                                <Play size={18} className="text-white fill-white" />
                               </div>
                             </Link>
 
                             <div className="flex flex-col min-w-0">
                               <Link
                                 href={`/watch/${vid._id}`}
-                                className="font-bold text-zinc-200 hover:text-indigo-400 transition-colors line-clamp-1 text-sm"
+                                className="font-bold text-zinc-100 hover:text-indigo-400 transition-colors line-clamp-1 text-sm"
                               >
                                 {vid.title}
                               </Link>
-                              <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5 font-light">
+                              <p className="text-xs text-zinc-400 line-clamp-1 mt-1 font-normal">
                                 {vid.description || "No description provided"}
                               </p>
                             </div>
@@ -486,7 +473,7 @@ export default function DashboardPage() {
                         <td className="py-4 px-4">
                           <button
                             onClick={() => handleTogglePublish(vid._id)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                               vid.isPublic
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
                                 : "bg-zinc-800/80 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800"
@@ -509,7 +496,7 @@ export default function DashboardPage() {
                         {/* Upload Date */}
                         <td className="py-4 px-4 text-xs text-zinc-400 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
-                            <Calendar size={13} className="text-zinc-500" />
+                            <Calendar size={14} className="text-zinc-500" />
                             <span>
                               {new Date(vid.createdAt).toLocaleDateString(undefined, {
                                 year: "numeric",
@@ -522,37 +509,37 @@ export default function DashboardPage() {
 
                         {/* Views */}
                         <td className="py-4 px-4 text-xs text-zinc-300 font-semibold whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 bg-zinc-950/60 px-2.5 py-1 rounded-lg border border-zinc-800/60 w-fit">
-                            <Eye size={13} className="text-indigo-400" />
+                          <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800/60 w-fit">
+                            <Eye size={14} className="text-indigo-400" />
                             <span>{(vid.views || 0).toLocaleString()}</span>
                           </div>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-4 px-5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-4 px-6 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
                             <Link
                               href={`/watch/${vid._id}`}
-                              className="text-zinc-400 hover:text-zinc-200 p-2 rounded-xl bg-zinc-950/60 border border-zinc-800/60 hover:border-zinc-700 transition-all"
+                              className="text-zinc-400 hover:text-zinc-100 p-2 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all"
                               title="Watch Video"
                             >
-                              <ExternalLink size={14} />
+                              <ExternalLink size={15} />
                             </Link>
 
                             <button
                               onClick={() => triggerEdit(vid)}
-                              className="text-zinc-400 hover:text-indigo-400 p-2 rounded-xl bg-zinc-950/60 border border-zinc-800/60 hover:border-indigo-500/40 transition-all"
+                              className="text-zinc-400 hover:text-indigo-400 p-2 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-indigo-500/40 transition-all"
                               title="Edit Video"
                             >
-                              <Edit3 size={14} />
+                              <Edit3 size={15} />
                             </button>
 
                             <button
                               onClick={() => handleDeleteVideo(vid._id)}
-                              className="text-zinc-400 hover:text-rose-400 p-2 rounded-xl bg-zinc-950/60 border border-zinc-800/60 hover:border-rose-500/40 transition-all"
+                              className="text-zinc-400 hover:text-rose-400 p-2 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-rose-500/40 transition-all"
                               title="Delete Video"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={15} />
                             </button>
                           </div>
                         </td>
@@ -562,12 +549,12 @@ export default function DashboardPage() {
                 </table>
               </div>
             ) : (
-              <div className="text-center py-20 flex flex-col items-center justify-center">
-                <div className="w-16 h-16 rounded-3xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-600 mb-4">
+              <div className="text-center py-24 flex flex-col items-center justify-center">
+                <div className="w-16 h-16 rounded-3xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-600 mb-4 shadow-xl">
                   <Film size={28} />
                 </div>
-                <h4 className="font-bold text-base text-zinc-300">No videos found</h4>
-                <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+                <h4 className="font-bold text-base text-zinc-200">No videos found</h4>
+                <p className="text-xs text-zinc-400 mt-1 max-w-sm">
                   {searchQuery
                     ? `No matches found for "${searchQuery}". Try clearing search or status filters.`
                     : "Upload your first video to start growing your LevelTube channel!"}
@@ -585,7 +572,7 @@ export default function DashboardPage() {
                 ) : (
                   <button
                     onClick={() => setUploadOpen(true)}
-                    className="mt-5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-6 py-2.5 rounded-full shadow-lg shadow-indigo-600/20"
+                    className="mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-3 rounded-full shadow-lg shadow-indigo-600/25 border border-indigo-400/30"
                   >
                     Upload First Video
                   </button>
@@ -596,14 +583,13 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Upload Video Modal Overlay */}
+      {/* ── Upload Video Modal Overlay ─────────────────────────────── */}
       {uploadOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-7 rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] animate-fade-in relative overflow-hidden">
-            {/* Modal Header */}
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-8 rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] animate-fade-in relative overflow-hidden">
             <div className="flex justify-between items-center pb-4 border-b border-zinc-800 mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                   <Upload size={20} />
                 </div>
                 <div>
@@ -620,7 +606,6 @@ export default function DashboardPage() {
             </div>
 
             <form onSubmit={handleUploadSubmit} className="flex flex-col gap-4 overflow-y-auto pr-1">
-              {/* Title */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs text-zinc-300 font-bold">Video Title *</label>
                 <input
@@ -629,11 +614,10 @@ export default function DashboardPage() {
                   value={upTitle}
                   onChange={(e) => setUpTitle(e.target.value)}
                   required
-                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2.5 px-4 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2.5 px-4 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-all"
                 />
               </div>
 
-              {/* Description */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs text-zinc-300 font-bold">Description *</label>
                 <textarea
@@ -642,13 +626,11 @@ export default function DashboardPage() {
                   onChange={(e) => setUpDesc(e.target.value)}
                   required
                   rows={3}
-                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2.5 px-4 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none transition-all"
+                  className="bg-zinc-950 border border-zinc-800 rounded-2xl py-2.5 px-4 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 resize-none transition-all"
                 />
               </div>
 
-              {/* File Inputs Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Video File */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs text-zinc-300 font-bold">Video File (.mp4) *</label>
                   <label className="border-2 border-dashed border-zinc-800 hover:border-indigo-500/50 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer bg-zinc-950/60 hover:bg-zinc-950 transition-all group">
@@ -666,7 +648,6 @@ export default function DashboardPage() {
                   </label>
                 </div>
 
-                {/* Thumbnail File */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs text-zinc-300 font-bold">Thumbnail Image *</label>
                   <label className="border-2 border-dashed border-zinc-800 hover:border-indigo-500/50 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer bg-zinc-950/60 hover:bg-zinc-950 transition-all group relative overflow-hidden">
@@ -695,7 +676,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Submit Buttons */}
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-zinc-800">
                 <button
                   type="button"
@@ -707,11 +687,11 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={upLoading}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-3 rounded-xl shadow-lg shadow-indigo-600/25 disabled:opacity-40 flex items-center gap-2"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-lg shadow-indigo-600/25 border border-indigo-400/30 disabled:opacity-40 flex items-center gap-2"
                 >
                   {upLoading ? (
                     <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       <span>Uploading Content...</span>
                     </>
                   ) : (
@@ -727,13 +707,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Edit Video Modal Overlay */}
+      {/* ── Edit Video Modal Overlay ───────────────────────────────── */}
       {editOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-lg shadow-2xl animate-fade-in flex flex-col">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-8 rounded-3xl w-full max-w-lg shadow-2xl animate-fade-in flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-zinc-800 mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                   <Edit3 size={18} />
                 </div>
                 <div>
@@ -793,7 +773,7 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={editLoading}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg disabled:opacity-40"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-2xl shadow-lg shadow-indigo-600/25 border border-indigo-400/30 disabled:opacity-40"
                 >
                   {editLoading ? "Saving Changes..." : "Save Changes"}
                 </button>
