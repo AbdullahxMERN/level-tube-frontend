@@ -281,7 +281,7 @@ export default function DashboardPage() {
       {loading ? (
         // Skeleton loader
         <div className="flex flex-col gap-5 sm:gap-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="h-28 sm:h-32 rounded-2xl sm:rounded-3xl bg-zinc-900/60 border border-zinc-800/50 animate-pulse" />
             ))}
@@ -290,8 +290,8 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* ── Analytics Overview Cards (2 Columns on Mobile) ──────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+          {/* ── Analytics Overview Cards (1 Column on Mobile, 2 on Tablet, 4 on Desktop) ────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {[
               {
                 title: "Total Content",
