@@ -32,6 +32,31 @@ const clearStorage = () => {
   }
 };
 
+// Helper to recursively upgrade any http:// Cloudinary or media URLs to https://
+function sanitizeHttpsUrls(data) {
+  if (!data) return data;
+  if (typeof data === "string") {
+    if (data.startsWith("http://res.cloudinary.com")) {
+      return data.replace("http://res.cloudinary.com", "https://res.cloudinary.com");
+    }
+    if (data.startsWith("http://")) {
+      return data.replace("http://", "https://");
+    }
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map(sanitizeHttpsUrls);
+  }
+  if (typeof data === "object" && !(data instanceof Date)) {
+    const sanitized = {};
+    for (const key in data) {
+      sanitized[key] = sanitizeHttpsUrls(data[key]);
+    }
+    return sanitized;
+  }
+  return data;
+}
+
 async function request(endpoint, options = {}, isRetry = false) {
   const token = getStoredToken();
   const headers = { ...options.headers };
@@ -64,7 +89,7 @@ async function request(endpoint, options = {}, isRetry = false) {
   if (!response.ok) {
     throw new Error(data.message || "API request failed");
   }
-  return data;
+  return sanitizeHttpsUrls(data);
 }
 
 async function tryRefreshToken() {
