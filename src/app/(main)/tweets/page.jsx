@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { api } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import {
-  Heart,
+  ThumbsUp,
   Send,
   Trash2,
   Loader2,
@@ -73,8 +73,9 @@ export default function TweetsPage() {
     }
   };
 
+  // Same sign-in toast style as comments section
   const promptSignIn = (action) => {
-    setSignInPrompt(`Sign in to ${action}`);
+    setSignInPrompt(`Please sign in to ${action}.`);
     setTimeout(() => setSignInPrompt(null), 4000);
   };
 
@@ -164,25 +165,31 @@ export default function TweetsPage() {
   return (
     <div className="max-w-2xl mx-auto flex flex-col min-h-screen pb-20">
 
-      {/* ── Sign-in toast ───────────────────────────────────────── */}
+      {/* ── Sign-in toast (same style as comments section) ──────── */}
       {signInPrompt && (
-        <div className="fixed bottom-6 right-4 sm:right-6 z-50 flex items-center gap-3 bg-zinc-900 border border-indigo-500/30 px-4 py-3 rounded-2xl shadow-2xl shadow-black/50 animate-fade-in max-w-xs">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
-            <LogIn size={15} />
+        <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 border border-indigo-500/40 p-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-fade-in max-w-sm">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
+            <LogIn size={18} />
           </div>
-          <p className="text-xs text-zinc-200 font-medium flex-1">{signInPrompt}</p>
-          <Link href="/login" className="text-xs font-bold text-indigo-400 hover:text-indigo-300 whitespace-nowrap">
-            Sign in
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-200 font-semibold">{signInPrompt}</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Join LevelTube to interact with creators.</p>
+          </div>
+          <Link
+            href="/login"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex-shrink-0"
+          >
+            Sign In
           </Link>
-          <button onClick={() => setSignInPrompt(null)} className="text-zinc-600 hover:text-zinc-400">
-            <X size={13} />
+          <button onClick={() => setSignInPrompt(null)} className="text-zinc-500 hover:text-zinc-300">
+            <X size={14} />
           </button>
         </div>
       )}
 
       {/* ── Sticky header ───────────────────────────────────────── */}
       <div className="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 bg-zinc-950/85 backdrop-blur-2xl border-b border-zinc-900/80">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center">
+        <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
           <Feather size={17} className="text-indigo-400" />
         </div>
         <div>
@@ -225,9 +232,8 @@ export default function TweetsPage() {
                 style={{ overflowWrap: "anywhere" }}
               />
 
-              {/* Divider + Actions */}
+              {/* Actions */}
               <div className="flex items-center justify-between pt-3 border-t border-zinc-900/70">
-                {/* char counter — no limit, just informational */}
                 <span className="text-[11px] font-mono text-zinc-600 tabular-nums">
                   {newTweetContent.length > 0 ? `${newTweetContent.length} chars` : ""}
                 </span>
@@ -237,7 +243,6 @@ export default function TweetsPage() {
                   disabled={!newTweetContent.trim() || posting}
                   className="relative flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm px-5 py-2.5 rounded-full transition-all duration-200 shadow-lg shadow-indigo-600/25 overflow-hidden group"
                 >
-                  {/* shimmer */}
                   <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
                   {posting ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -255,10 +260,9 @@ export default function TweetsPage() {
       ) : (
         /* ── Guest CTA ── */
         <div className="mx-5 my-5 relative overflow-hidden rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900 via-zinc-900/80 to-indigo-950/20 p-6">
-          {/* decorative glow */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
               <Sparkles size={18} className="text-indigo-400" />
             </div>
             <div className="flex-1 min-w-0">
@@ -285,7 +289,7 @@ export default function TweetsPage() {
         </div>
       ) : tweets.length > 0 ? (
         <div className="flex flex-col">
-          {tweets.map((tweet, index) => {
+          {tweets.map((tweet) => {
             const likesCount = typeof tweet.likesCount === "number" && !isNaN(tweet.likesCount) ? tweet.likesCount : 0;
             const canDelete =
               user && (user._id === tweet.owner?._id || user.userName === tweet.owner?.userName);
@@ -295,89 +299,85 @@ export default function TweetsPage() {
             return (
               <article
                 key={tweet._id}
-                className={`group relative flex gap-3.5 px-5 py-5 border-b border-zinc-900/60 transition-all duration-200 hover:bg-white/[0.015] ${isDeletingThis ? "opacity-40 pointer-events-none" : ""}`}
-                style={{ animationDelay: `${index * 30}ms` }}
+                className={`group relative px-5 py-5 border-b border-zinc-900/60 transition-all duration-200 hover:bg-white/[0.015] ${isDeletingThis ? "opacity-40 pointer-events-none" : ""}`}
               >
-                {/* Left: Avatar column with thread line */}
-                <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                  <Link href={`/channel/${tweet.owner?.userName}`} className="block">
+                {/* ── Card top: avatar + meta + delete ── */}
+                <div className="flex items-center gap-3 mb-3">
+                  <Link href={`/channel/${tweet.owner?.userName}`} className="flex-shrink-0">
                     <img
                       src={tweet.owner?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"}
                       alt={tweet.owner?.fullName}
-                      className="w-11 h-11 rounded-full object-cover border border-zinc-800 hover:border-indigo-500/50 transition-colors duration-200"
+                      className="w-10 h-10 rounded-full object-cover border border-zinc-800 hover:border-indigo-500/50 transition-colors duration-200"
                     />
                   </Link>
-                </div>
 
-                {/* Right: Content */}
-                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                  {/* Header row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <Link
                         href={`/channel/${tweet.owner?.userName}`}
-                        className="font-bold text-sm text-zinc-100 hover:text-indigo-300 transition-colors duration-150 truncate max-w-[130px] sm:max-w-none"
+                        className="font-bold text-sm text-zinc-100 hover:text-indigo-400 transition-colors duration-150 truncate max-w-[140px] sm:max-w-none"
                       >
                         {tweet.owner?.fullName}
                       </Link>
-                      <span className="text-[13px] text-zinc-500 truncate">
-                        @{tweet.owner?.userName}
-                      </span>
+                      <span className="text-[12px] text-zinc-500 truncate">@{tweet.owner?.userName}</span>
                       <span className="text-zinc-700 text-[11px]">·</span>
-                      <span className="text-[12px] text-zinc-600 whitespace-nowrap hover:text-zinc-400 transition-colors" title={new Date(tweet.createdAt).toLocaleString()}>
+                      <span
+                        className="text-[12px] text-zinc-600 whitespace-nowrap hover:text-zinc-400 transition-colors"
+                        title={new Date(tweet.createdAt).toLocaleString()}
+                      >
                         {relativeTime(tweet.createdAt)}
                       </span>
                     </div>
-
-                    {/* Delete button (owner only) */}
-                    {canDelete && (
-                      <button
-                        onClick={() => handleDeleteTweet(tweet._id)}
-                        aria-label="Delete tweet"
-                        className="ml-1 flex-shrink-0 p-1.5 rounded-full text-zinc-700 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-200"
-                      >
-                        {isDeletingThis ? (
-                          <Loader2 size={14} className="animate-spin text-red-400" />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    )}
                   </div>
 
-                  {/* Tweet body */}
-                  <p
-                    className="text-[15px] text-zinc-200 leading-relaxed whitespace-pre-line break-words"
-                    style={{ overflowWrap: "anywhere" }}
-                  >
-                    {tweet.content}
-                  </p>
-
-                  {/* Actions bar */}
-                  <div className="flex items-center gap-4 mt-2 -ml-1.5">
-                    {/* Like */}
+                  {canDelete && (
                     <button
-                      onClick={() => handleLikeTweet(tweet._id)}
-                      aria-label={tweet.isLiked ? "Unlike" : "Like"}
-                      className={`flex items-center gap-1.5 group/like transition-colors duration-150 ${
-                        tweet.isLiked ? "text-pink-500" : "text-zinc-500 hover:text-pink-500"
-                      }`}
+                      onClick={() => handleDeleteTweet(tweet._id)}
+                      aria-label="Delete tweet"
+                      className="flex-shrink-0 p-1.5 rounded-full text-zinc-700 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-200"
                     >
-                      <span className="p-1.5 rounded-full group-hover/like:bg-pink-500/10 transition-colors duration-150">
-                        {isLikingThis ? (
-                          <Loader2 size={15} className="animate-spin" />
-                        ) : (
-                          <Heart
-                            size={15}
-                            fill={tweet.isLiked ? "currentColor" : "none"}
-                            strokeWidth={tweet.isLiked ? 0 : 2}
-                            className={tweet.isLiked ? "scale-110" : ""}
-                          />
-                        )}
-                      </span>
-                      <span className="text-[13px] tabular-nums font-medium">{likesCount > 0 ? likesCount : ""}</span>
+                      {isDeletingThis ? (
+                        <Loader2 size={14} className="animate-spin text-red-400" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
                     </button>
-                  </div>
+                  )}
+                </div>
+
+                {/* ── Tweet body ── */}
+                <p
+                  className="text-[15px] text-zinc-200 leading-relaxed whitespace-pre-line break-words mb-4"
+                  style={{ overflowWrap: "anywhere" }}
+                >
+                  {tweet.content}
+                </p>
+
+                {/* ── Divider ── */}
+                <div className="border-t border-zinc-900/80 mb-3" />
+
+                {/* ── Like action — indigo-400 to match comments ── */}
+                <div className="flex items-center gap-1.5 -ml-1">
+                  <button
+                    onClick={() => handleLikeTweet(tweet._id)}
+                    aria-label={tweet.isLiked ? "Unlike" : "Like"}
+                    className={`flex items-center gap-1.5 text-xs transition-all py-1 px-2 rounded-full hover:bg-indigo-500/10 ${
+                      tweet.isLiked
+                        ? "text-indigo-400 font-semibold"
+                        : "text-zinc-500 hover:text-indigo-400"
+                    }`}
+                  >
+                    {isLikingThis ? (
+                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ThumbsUp
+                        size={14}
+                        fill={tweet.isLiked ? "currentColor" : "none"}
+                        className="transition-transform active:scale-125 duration-200"
+                      />
+                    )}
+                    <span className="tabular-nums">{likesCount > 0 ? likesCount : 0}</span>
+                  </button>
                 </div>
               </article>
             );
@@ -387,7 +387,7 @@ export default function TweetsPage() {
         /* ── Empty state ── */
         <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
           <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4">
-            <Feather size={28} className="text-zinc-600" />
+            <Feather size={28} className="text-indigo-400" />
           </div>
           <h3 className="font-bold text-zinc-300 text-base mb-1">Nothing posted yet</h3>
           <p className="text-sm text-zinc-500 max-w-xs leading-relaxed">
