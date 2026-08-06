@@ -210,17 +210,29 @@ export default function DashboardPage() {
   const filteredVideos = useMemo(() => {
     return videos
       .filter((v) => {
+        const searchLower = searchQuery.trim().toLowerCase();
         const matchesSearch =
-          v.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.description?.toLowerCase().includes(searchQuery.toLowerCase());
-        if (statusFilter === "public") return matchesSearch && v.isPublic;
-        if (statusFilter === "private") return matchesSearch && !v.isPublic;
+          !searchLower ||
+          (v.title || "").toLowerCase().includes(searchLower) ||
+          (v.description || "").toLowerCase().includes(searchLower);
+
+        const isVidPublic = v.isPublic !== false; // treat undefined as public
+
+        if (statusFilter === "public") return matchesSearch && isVidPublic;
+        if (statusFilter === "private") return matchesSearch && !isVidPublic;
         return matchesSearch;
       })
       .sort((a, b) => {
-        if (sortBy === "views") return (b.views || 0) - (a.views || 0);
-        if (sortBy === "title") return (a.title || "").localeCompare(b.title || "");
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        if (sortBy === "views") {
+          return (b.views || 0) - (a.views || 0);
+        }
+        if (sortBy === "title") {
+          return (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" });
+        }
+        // "newest"
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
       });
   }, [videos, searchQuery, statusFilter, sortBy]);
 
