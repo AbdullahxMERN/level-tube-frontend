@@ -60,10 +60,16 @@ export default function WatchPage() {
   const likingCommentRef = useRef(new Set());
   const likingVideoRef = useRef(false);
 
+  // Per-comment like loading state for button feedback
+  const [likingCommentIds, setLikingCommentIds] = useState(new Set());
+
   // Replies state — stores fetched replies per comment, and expanded toggle
   const [repliesByComment, setRepliesByComment] = useState({});
   const [expandedThreads, setExpandedThreads] = useState({});
   const [loadingReplies, setLoadingReplies] = useState({});
+
+  // replyMentionName — the @username shown in reply placeholder
+  const [replyMentionName, setReplyMentionName] = useState("");
 
   // Format video duration (seconds to hh:mm:ss or mm:ss)
   const formatDuration = (secs) => {
@@ -170,6 +176,8 @@ export default function WatchPage() {
 
   const promptGuestSignIn = (actionName) => {
     setSignInPrompt(`Please sign in to ${actionName}.`);
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => setSignInPrompt(null), 4000);
   };
 
   const handleLikeToggle = async () => {
@@ -334,18 +342,26 @@ export default function WatchPage() {
 
   // ─── Reply System ─────────────────────────────────────────────
 
-  const handleReplyClick = (comment) => {
+  const handleReplyClick = (comment, mentionName = null) => {
     if (!user) return promptGuestSignIn("reply to comments");
 
     if (replyingTo === comment._id) {
       setReplyingTo(null);
       setReplyText("");
+      setReplyMentionName("");
       return;
     }
 
+    const name = mentionName || comment.owner?.fullName || "";
     setReplyingTo(comment._id);
+    setReplyMentionName(name);
     setReplyText("");
-    setTimeout(() => replyInputRef.current?.focus(), 0);
+    setTimeout(() => {
+      if (replyInputRef.current) {
+        replyInputRef.current.focus();
+        replyInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 50);
   };
 
   const handleReplySubmit = async (e, parentCommentId) => {
@@ -356,11 +372,13 @@ export default function WatchPage() {
     try {
       const response = await api.comments.addReply(parentCommentId, replyText.trim());
       if (response.success && response.data) {
+        // Optimistically add reply to local state immediately
         setRepliesByComment((prev) => ({
           ...prev,
           [parentCommentId]: [...(prev[parentCommentId] || []), response.data],
         }));
 
+        // Increment reply count on the parent comment
         setComments((prev) =>
           prev.map((c) =>
             c._id === parentCommentId
@@ -369,9 +387,14 @@ export default function WatchPage() {
           ),
         );
 
+        // Auto-expand the thread to show the newly posted reply
         setExpandedThreads((prev) => ({ ...prev, [parentCommentId]: true }));
         setReplyText("");
+        setReplyMentionName("");
         setReplyingTo(null);
+
+        // Re-fetch replies from server to sync (non-blocking)
+        fetchReplies(parentCommentId, true);
       }
     } catch (err) {
       console.error(err);
@@ -379,8 +402,9 @@ export default function WatchPage() {
   };
 
   // Guests can fetch and view replies on-demand
-  const fetchReplies = async (commentId) => {
-    if (loadingReplies[commentId]) return;
+  // forceRefetch: bypass the loading guard (used after posting a reply)
+  const fetchReplies = async (commentId, forceRefetch = false) => {
+    if (!forceRefetch && loadingReplies[commentId]) return;
     setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
 
     try {
@@ -417,6 +441,7 @@ export default function WatchPage() {
     if (!user) return promptGuestSignIn("like comments");
     if (likingCommentRef.current.has(commentId)) return;
     likingCommentRef.current.add(commentId);
+    setLikingCommentIds((prev) => new Set([...prev, commentId]));
 
     const targetList = isReply && parentId ? (repliesByComment[parentId] || []) : comments;
     const targetComment = targetList.find((c) => c._id === commentId);
@@ -433,7 +458,7 @@ export default function WatchPage() {
           : c,
       );
 
-    // Immediate UI update
+    // Immediate optimistic UI update
     if (isReply && parentId) {
       setRepliesByComment((prev) => ({
         ...prev,
@@ -446,6 +471,7 @@ export default function WatchPage() {
     try {
       const response = await api.likes.toggleComment(commentId);
       if (response.success && response.data) {
+        // Sync with server-confirmed values
         const { isLiked: dbLiked, likesCount: dbCount } = response.data;
         if (isReply && parentId) {
           setRepliesByComment((prev) => ({
@@ -458,8 +484,22 @@ export default function WatchPage() {
       }
     } catch (err) {
       console.error("Failed to toggle comment like:", err);
+      // Revert optimistic update on error
+      if (isReply && parentId) {
+        setRepliesByComment((prev) => ({
+          ...prev,
+          [parentId]: applyLike(prev[parentId] || [], !targetLiked),
+        }));
+      } else {
+        setComments((prev) => applyLike(prev, !targetLiked));
+      }
     } finally {
       likingCommentRef.current.delete(commentId);
+      setLikingCommentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(commentId);
+        return next;
+      });
     }
   };
 
@@ -578,34 +618,50 @@ export default function WatchPage() {
                 handleCommentLikeToggle(comment._id, isReply, parentId)
               }
               aria-label={comment.isLiked ? "Unlike comment" : "Like comment"}
-              className={`flex items-center gap-1.5 text-xs transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50 ${
+              disabled={likingCommentIds.has(comment._id)}
+              className={`flex items-center gap-1.5 text-xs transition-all py-1 px-2 rounded-full hover:bg-zinc-900/50 disabled:opacity-60 ${
                 comment.isLiked
                   ? "text-indigo-400 font-semibold"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              <ThumbsUp
-                size={12}
-                fill={comment.isLiked ? "currentColor" : "none"}
-                className="transition-transform active:scale-125 duration-200"
-              />
+              {likingCommentIds.has(comment._id) ? (
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <ThumbsUp
+                  size={12}
+                  fill={comment.isLiked ? "currentColor" : "none"}
+                  className="transition-transform active:scale-125 duration-200"
+                />
+              )}
               <span>{comment.likesCount || 0}</span>
             </button>
 
-            {!isReply && (
+            {/* Reply button: show for root comments, and also within reply threads (to @mention that replier) */}
+            {(!isReply || parentId) && (
               <button
-                onClick={() => handleReplyClick(comment)}
+                onClick={() => {
+                  // If clicking Reply on a reply, target the parent comment's reply box with @mention
+                  const targetComment = isReply
+                    ? comments.find((c) => c._id === parentId)
+                    : comment;
+                  if (targetComment) {
+                    handleReplyClick(targetComment, comment.owner?.fullName);
+                  }
+                }}
                 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-indigo-400 transition-colors py-1 px-2 rounded-full hover:bg-zinc-900/50"
               >
                 <Reply size={12} />
                 <span>
-                  {replyingTo === comment._id ? "Cancel" : "Reply"}
+                  {replyingTo === (isReply ? parentId : comment._id) && !isReply
+                    ? "Cancel"
+                    : "Reply"}
                 </span>
               </button>
             )}
           </div>
 
-          {/* Inline Reply Input Form — only for root comments */}
+          {/* Inline Reply Input Form — shown for root comments when replyingTo matches this comment */}
           {!isReply && replyingTo === comment._id && (
             <form
               onSubmit={(e) => handleReplySubmit(e, comment._id)}
@@ -619,32 +675,40 @@ export default function WatchPage() {
                 alt={user?.fullName || "You"}
                 className="w-7 h-7 rounded-full object-cover border border-zinc-800 flex-shrink-0"
               />
-              <div className="flex-1 flex gap-2">
-                <input
-                  ref={replyInputRef}
-                  type="text"
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Reply to ${comment.owner?.fullName || "user"}...`}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
-                />
-                <button
-                  type="submit"
-                  disabled={!replyText.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                >
-                  <Send size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReplyingTo(null);
-                    setReplyText("");
-                  }}
-                  className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
-                >
-                  <X size={13} />
-                </button>
+              <div className="flex-1 flex flex-col gap-1.5">
+                <div className="flex gap-2">
+                  <input
+                    ref={replyInputRef}
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={`@${replyMentionName || comment.owner?.fullName || "user"}  Reply...`}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!replyText.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-xl disabled:opacity-40 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                  >
+                    <Send size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplyingTo(null);
+                      setReplyText("");
+                      setReplyMentionName("");
+                    }}
+                    className="text-zinc-500 hover:text-zinc-300 p-2 rounded-xl hover:bg-zinc-900 transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+                {replyMentionName && (
+                  <p className="text-[10px] text-indigo-400/70 pl-3">
+                    Replying to <span className="font-semibold">@{replyMentionName}</span>
+                  </p>
+                )}
               </div>
             </form>
           )}
