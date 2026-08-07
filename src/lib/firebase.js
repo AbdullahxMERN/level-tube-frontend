@@ -20,4 +20,16 @@ export async function signInWithGoogle() {
   return idToken;
 }
 
+export async function getFirebaseToken() {
+  if (auth.currentUser) {
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (e) {
+      console.warn("Error getting Firebase ID token:", e);
+      return null;
+    }
+  }
+  return null;
+}
+
 export { auth };

@@ -1,3 +1,5 @@
+import { getFirebaseToken } from "@/lib/firebase";
+
 /**
  * Clean API Service Client for connecting the Next.js frontend to the Express backend.
  * Base URL: http://localhost:5001/api/v1
@@ -38,6 +40,16 @@ const clearStorage = () => {
   }
 };
 
+// Dynamically gets the active token: Firebase ID Token for Google users, or custom JWT for local users
+async function getActiveToken() {
+  const user = getStoredUser();
+  if (user?.authProvider === "google") {
+    const fbToken = await getFirebaseToken();
+    if (fbToken) return fbToken;
+  }
+  return getStoredToken();
+}
+
 // Safe concurrency lock to prevent duplicate parallel refresh calls
 let refreshPromise = null;
 
@@ -67,7 +79,7 @@ function sanitizeHttpsUrls(data) {
 }
 
 async function request(endpoint, options = {}, isRetry = false) {
-  const token = getStoredToken();
+  const token = await getActiveToken();
   const headers = { ...options.headers };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -102,6 +114,13 @@ async function request(endpoint, options = {}, isRetry = false) {
 }
 
 async function tryRefreshToken() {
+  const user = getStoredUser();
+  // Google users rely on Firebase SDK for token refresh
+  if (user?.authProvider === "google") {
+    const newFbToken = await getFirebaseToken();
+    return !!newFbToken;
+  }
+
   if (refreshPromise) {
     return refreshPromise;
   }
@@ -170,9 +189,10 @@ export const api = {
         method: "POST",
         body: { idToken },
       }).then((res) => {
-        if (res.success && res.data.accessToken) {
-          setStoredToken(res.data.accessToken);
-          if (res.data.refreshToken) setStoredRefreshToken(res.data.refreshToken);
+        if (res.success && res.data) {
+          if (res.data.firebaseToken) {
+            setStoredToken(res.data.firebaseToken);
+          }
           setStoredUser(res.data.user);
         }
         return res;

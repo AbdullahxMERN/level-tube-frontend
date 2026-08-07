@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
       const response = await api.auth.googleLogin(idToken);
       if (response.success && response.data) {
         setUser(response.data.user);
-        setToken(response.data.accessToken);
+        setToken(response.data.firebaseToken || response.data.accessToken);
         router.push("/");
         return { success: true };
       }
@@ -112,6 +112,10 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     setLoading(true);
     try {
+      const { auth } = await import("@/lib/firebase");
+      if (auth.currentUser) {
+        await auth.signOut();
+      }
       await api.auth.logout();
     } catch (err) {
       console.warn("Logout failed, clearing local storage anyway", err);
