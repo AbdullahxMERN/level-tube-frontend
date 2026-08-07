@@ -26,11 +26,9 @@ export default function Logo({ size = "default" }) {
         />
       </svg>
 
-is 
       <span
-        className={`font-extrabold tracking-tight leading-none ${
-          isCompact ? "text-lg" : "text-xl"
-        }`}
+        className={`font-extrabold tracking-tight leading-none ${isCompact ? "text-lg" : "text-xl"
+          }`}
       >
         <span className="text-zinc-100">Level</span>
         <span className="text-indigo-400">Tube</span>
