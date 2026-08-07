@@ -26,6 +26,7 @@ export default function Logo({ size = "default" }) {
         />
       </svg>
 
+is 
       <span
         className={`font-extrabold tracking-tight leading-none ${
           isCompact ? "text-lg" : "text-xl"

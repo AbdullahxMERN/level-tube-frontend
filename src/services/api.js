@@ -17,6 +17,12 @@ const getStoredToken = () =>
 const setStoredToken = (token) =>
   typeof window !== "undefined" &&
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
+const getStoredRefreshToken = () =>
+  typeof window !== "undefined" ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+const setStoredRefreshToken = (token) =>
+  typeof window !== "undefined" &&
+  token &&
+  localStorage.setItem(REFRESH_TOKEN_KEY, token);
 const getStoredUser = () =>
   typeof window !== "undefined"
     ? JSON.parse(localStorage.getItem(USER_KEY) || "null")
@@ -31,6 +37,9 @@ const clearStorage = () => {
     localStorage.removeItem(USER_KEY);
   }
 };
+
+// Safe concurrency lock to prevent duplicate parallel refresh calls
+let refreshPromise = null;
 
 // Helper to recursively upgrade any http:// Cloudinary or media URLs to https://
 function sanitizeHttpsUrls(data) {
@@ -93,20 +102,38 @@ async function request(endpoint, options = {}, isRetry = false) {
 }
 
 async function tryRefreshToken() {
-  try {
-    const res = await fetch(`${API_BASE_URL}/user/refresh-token`, {
-      method: "POST",
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.success && data.data?.accessToken) {
-      setStoredToken(data.data.accessToken);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
+  if (refreshPromise) {
+    return refreshPromise;
   }
+
+  refreshPromise = (async () => {
+    try {
+      const storedRefreshToken = getStoredRefreshToken();
+      const res = await fetch(`${API_BASE_URL}/user/refresh-token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refreshToken: storedRefreshToken }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success && data.data?.accessToken) {
+        setStoredToken(data.data.accessToken);
+        if (data.data?.refreshToken) {
+          setStoredRefreshToken(data.data.refreshToken);
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
 // ==========================================
@@ -122,6 +149,7 @@ export const api = {
       }).then((res) => {
         if (res.success && res.data.accessToken) {
           setStoredToken(res.data.accessToken);
+          if (res.data.refreshToken) setStoredRefreshToken(res.data.refreshToken);
           setStoredUser(res.data.user);
         }
         return res;
@@ -131,6 +159,7 @@ export const api = {
         (res) => {
           if (res.success && res.data?.accessToken) {
             setStoredToken(res.data.accessToken);
+            if (res.data.refreshToken) setStoredRefreshToken(res.data.refreshToken);
             setStoredUser(res.data.user);
           }
           return res;
@@ -143,6 +172,7 @@ export const api = {
       }).then((res) => {
         if (res.success && res.data.accessToken) {
           setStoredToken(res.data.accessToken);
+          if (res.data.refreshToken) setStoredRefreshToken(res.data.refreshToken);
           setStoredUser(res.data.user);
         }
         return res;
