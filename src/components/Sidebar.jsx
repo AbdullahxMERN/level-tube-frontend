@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Home,
   History,
@@ -16,7 +16,6 @@ import {
 
 export default function Sidebar({ collapsed }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const menuItems = [
     { name: "Home", href: "/", icon: Home },
@@ -40,12 +39,7 @@ export default function Sidebar({ collapsed }) {
       <div className="flex-1 py-4 flex flex-col gap-1 px-2">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            item.href === "/?tab=trending"
-              ? pathname === "/" && searchParams.get("tab") === "trending"
-              : item.href === "/"
-              ? pathname === "/" && searchParams.get("tab") !== "trending"
-              : pathname === item.href;
+          const isActive = pathname === item.href;
 
           return (
             <Link
