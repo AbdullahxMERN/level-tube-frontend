@@ -248,7 +248,7 @@ export default function DashboardPage() {
         </p>
         <Link
           href="/login"
-          className="mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm px-7 sm:px-8 py-2.5 sm:py-3 rounded-full shadow-xl shadow-indigo-600/25 border border-indigo-400/30 transition-all duration-300"
+          className="mt-6 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs sm:text-sm px-7 sm:px-8 py-2.5 sm:py-3 rounded-full shadow-xl shadow-indigo-500/25 border border-indigo-400/30 transition-all duration-300"
         >
           Sign In to Creator Studio
         </Link>
@@ -282,7 +282,7 @@ export default function DashboardPage() {
           {/* Header Upload Button */}
           <button
             onClick={() => setUploadOpen(true)}
-            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl shadow-indigo-600/25 border border-indigo-400/30 transition-all duration-300 w-full sm:w-auto flex-shrink-0"
+            className="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-400 active:scale-95 text-white font-bold text-xs sm:text-sm px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl shadow-indigo-500/25 border border-indigo-400/30 transition-all duration-300 w-full sm:w-auto flex-shrink-0"
           >
             <Upload size={16} />
             <span>Upload Content</span>
@@ -581,7 +581,7 @@ export default function DashboardPage() {
                 ) : (
                   <button
                     onClick={() => setUploadOpen(true)}
-                    className="mt-5 sm:mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-600/25 border border-indigo-400/30"
+                    className="mt-5 sm:mt-6 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-500/25 border border-indigo-400/30"
                   >
                     Upload First Video
                   </button>
@@ -696,7 +696,7 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={upLoading}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-600/25 border border-indigo-400/30 disabled:opacity-40 flex items-center gap-2"
+                  className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-500/25 border border-indigo-400/30 disabled:opacity-40 flex items-center gap-2"
                 >
                   {upLoading ? (
                     <>
@@ -782,7 +782,7 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={editLoading}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-600/25 border border-indigo-400/30 disabled:opacity-40"
+                  className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs px-6 py-2.5 rounded-xl sm:rounded-2xl shadow-lg shadow-indigo-500/25 border border-indigo-400/30 disabled:opacity-40"
                 >
                   {editLoading ? "Saving Changes..." : "Save Changes"}
                 </button>
