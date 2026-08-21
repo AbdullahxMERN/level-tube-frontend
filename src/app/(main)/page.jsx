@@ -38,14 +38,11 @@ export default function HomePage() {
           let list = response.data;
 
           if (selectedCategory !== "All") {
+            const catLower = selectedCategory.toLowerCase();
             list = list.filter(
               (video) =>
-                video.title
-                  .toLowerCase()
-                  .includes(selectedCategory.toLowerCase()) ||
-                video.description
-                  .toLowerCase()
-                  .includes(selectedCategory.toLowerCase()),
+                (video.title || "").toLowerCase().includes(catLower) ||
+                (video.description || "").toLowerCase().includes(catLower),
             );
           }
 

@@ -32,6 +32,7 @@ export default function WatchPage() {
 
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscribersCount, setSubscribersCount] = useState(0);
 
@@ -133,6 +134,7 @@ export default function WatchPage() {
           const videoData = videoRes.data;
           setVideo(videoData);
           setIsLiked(videoData.isLiked || false);
+          setLikesCount(videoData.likesCount || 0);
 
           if (videoData.owner?.userName) {
             try {
@@ -186,16 +188,29 @@ export default function WatchPage() {
     likingVideoRef.current = true;
 
     const prevLiked = isLiked;
-    setIsLiked(!isLiked);
+    const prevCount = likesCount;
+
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    setLikesCount((prev) => Math.max(0, prev + (nextLiked ? 1 : -1)));
 
     try {
       const response = await api.likes.toggleVideo(videoId);
-      if (!response.success) {
+      if (response.success && response.data) {
+        if (typeof response.data.isLiked === "boolean") {
+          setIsLiked(response.data.isLiked);
+        }
+        if (typeof response.data.likesCount === "number") {
+          setLikesCount(response.data.likesCount);
+        }
+      } else if (!response.success) {
         setIsLiked(prevLiked);
+        setLikesCount(prevCount);
       }
     } catch (err) {
       console.error(err);
       setIsLiked(prevLiked);
+      setLikesCount(prevCount);
     } finally {
       likingVideoRef.current = false;
     }
@@ -863,6 +878,7 @@ export default function WatchPage() {
                 }`}
               >
                 <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
+                <span className="tabular-nums font-bold">{likesCount}</span>
                 <span>{isLiked ? "Liked" : "Like"}</span>
               </button>
 
