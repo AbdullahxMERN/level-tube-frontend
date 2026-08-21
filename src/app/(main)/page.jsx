@@ -85,7 +85,7 @@ export default function HomePage() {
       {isTrending && (
         <div className="flex items-center gap-2 text-zinc-200 text-sm font-semibold">
           <Flame size={16} className="text-orange-400" />
-          <span>Trending — sorted by most views</span>
+          <span>Trending</span>
         </div>
       )}
 
