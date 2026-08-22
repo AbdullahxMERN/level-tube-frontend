@@ -320,10 +320,6 @@ export default function ChannelPage() {
                 <p className="text-zinc-200 font-medium">{channelUser.email || 'Private'}</p>
               </div>
               <div>
-                <p className="text-zinc-500 text-xs">Joined</p>
-                <p className="text-zinc-200 font-medium">{new Date(channelUser.createdAt || Date.now()).toLocaleDateString()}</p>
-              </div>
-              <div>
                 <p className="text-zinc-500 text-xs">Verified User</p>
                 <p className="text-green-400 font-semibold flex items-center gap-1">Yes</p>
               </div>
