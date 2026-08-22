@@ -205,10 +205,10 @@ export const api = {
 
     getCurrentUser: () => request("/user/current-user"),
 
-    updateProfile: (fullName, email) =>
+    updateProfile: (fullName, email, userName) =>
       request("/user/account-details", {
         method: "PATCH",
-        body: { fullName, email },
+        body: { fullName, email, userName },
       }),
 
     changePassword: (oldPassword, newPassword) =>
